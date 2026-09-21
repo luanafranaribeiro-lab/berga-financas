@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Financas — Pessoal &amp; Bêrga</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root {
+    --bg: #14161d;
+    --surface: #1b1e27;
+    --surface-2: #232733;
+    --border: #2e3340;
+    --text: #EDEAE1;
+    --text-dim: #9297a8;
+    --accent-pessoal: #59BFB2;
+    --accent-pessoal-bg: rgba(89,191,178,0.12);
+    --accent-berga: #E0AC4C;
+    --accent-berga-bg: rgba(224,172,76,0.12);
+    --danger: #E2685C;
+    --danger-bg: rgba(226,104,92,0.12);
+    --positive: #6FBF7B;
+    --shadow: 0 8px 24px rgba(0,0,0,0.35);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #F5F3ED;
+      --surface: #FFFFFF;
+      --surface-2: #ECE8DC;
+      --border: #DAD4C4;
+      --text: #1C1E24;
+      --text-dim: #6B6F7D;
+      --accent-pessoal: #2C9186;
+      --accent-pessoal-bg: rgba(44,145,134,0.10);
+      --accent-berga: #B27E1F;
+      --accent-berga-bg: rgba(178,126,31,0.10);
+      --danger: #C2493D;
+      --danger-bg: rgba(194,73,61,0.10);
+      --positive: #2F8F45;
+      --shadow: 0 8px 24px rgba(0,0,0,0.08);
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="light"] {
+    --bg: #F5F3ED; --surface: #FFFFFF; --surface-2: #ECE8DC; --border: #DAD4C4;
+    --text: #1C1E24; --text-dim: #6B6F7D;
+    --accent-pessoal: #2C9186; --accent-pessoal-bg: rgba(44,145,134,0.10);
+    --accent-berga: #B27E1F; --accent-berga-bg: rgba(178,126,31,0.10);
+    --danger: #C2493D; --danger-bg: rgba(194,73,61,0.10); --positive: #2F8F45;
+    --shadow: 0 8px 24px rgba(0,0,0,0.08); color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    min-height: 100%;
+  }
+  h1, h2, h3, .display { font-family: 'Fraunces', Georgia, serif; }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  button { font-family: inherit; }
+
+  /* ---------- auth screen ---------- */
+  #authScreen {
+    min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+    padding: 24px 16px;
+  }
+  .auth-box { width: 100%; max-width: 360px; }
+  .auth-box h1 { font-size: 26px; margin: 0 0 4px; }
+  .auth-box .tag { color: var(--text-dim); font-size: 13.5px; margin-bottom: 22px; }
+  .auth-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .auth-tabs button {
+    flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-dim); font-size: 13px; font-weight: 500; cursor: pointer;
+  }
+  .auth-tabs button.active { background: var(--surface-2); color: var(--text); }
+  .auth-box form { display: flex; flex-direction: column; gap: 10px; }
+  .auth-box label { font-size: 11.5px; color: var(--text-dim); display: block; margin-bottom: 4px; }
+  .auth-box input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 11px 12px; font-size: 15px; font-family: inherit;
+  }
+  .auth-box input:focus { outline: 2px solid var(--accent-pessoal); outline-offset: 1px; }
+  .auth-box .btn-primary {
+    margin-top: 4px; padding: 12px; border-radius: 9px; border: none; background: var(--text);
+    color: var(--bg); font-size: 14.5px; font-weight: 600; cursor: pointer;
+  }
+  .auth-box .btn-primary:disabled { opacity: 0.6; }
+  .auth-msg { font-size: 13px; margin-top: 10px; padding: 10px 12px; border-radius: 9px; }
+  .auth-msg.error { background: var(--danger-bg); color: var(--danger); }
+  .auth-msg.ok { background: rgba(111,191,123,0.12); color: var(--positive); }
+
+  /* ---------- layout shell ---------- */
+  #app { max-width: 640px; margin: 0 auto; padding: 20px 16px 96px; display: none; }
+  header.top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 4px 2px 18px;
+  }
+  header.top h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  header.top .sub { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
+  #logoutBtn {
+    background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 8px;
+    padding: 6px 10px; font-size: 12px; cursor: pointer;
+  }
+
+  /* ---------- bottom nav ---------- */
+  nav.tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    display: none;
+  }
+  nav.tabs .row { max-width: 640px; margin: 0 auto; display: flex; }
+  nav.tabs button {
+    flex: 1; background: none; border: none; color: var(--text-dim);
+    padding: 11px 4px 9px; font-size: 11px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: color .15s ease;
+  }
+  nav.tabs button svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+  nav.tabs button.active { color: var(--text); }
+  nav.tabs button.active svg { stroke: var(--text); }
+
+  /* ---------- cards / sections ---------- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px; margin-bottom: 12px;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+  .stat .label { font-size: 11.5px; color: var(--text-dim); margin-bottom: 6px; }
+  .stat .value { font-size: 21px; font-weight: 600; }
+  .stat.pessoal { border-color: color-mix(in srgb, var(--accent-pessoal) 35%, var(--border)); }
+  .stat.berga { border-color: color-mix(in srgb, var(--accent-berga) 35%, var(--border)); }
+  .stat.pessoal .value { color: var(--accent-pessoal); }
+  .stat.berga .value { color: var(--accent-berga); }
+  .stat.wide { grid-column: 1 / -1; }
+
+  .section-title { font-size: 13px; text-transform: none; color: var(--text-dim); margin: 22px 2px 10px; font-weight: 500; }
+  .section-title:first-child { margin-top: 0; }
+
+  /* ---------- domain sub-tabs (entradas/saidas) ---------- */
+  .subtabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .subtabs button {
+    flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-dim); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all .15s ease;
+  }
+  .subtabs button.active { background: var(--surface-2); color: var(--text); }
+
+  /* ---------- list rows ---------- */
+  .row-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 4px; border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+  .row-item:last-child { border-bottom: none; }
+  .row-item .left { min-width: 0; }
+  .row-item .cat { font-size: 14px; font-weight: 500; }
+  .row-item .meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .row-item .right { text-align: right; flex-shrink: 0; }
+  .row-item .amt { font-size: 14.5px; font-weight: 600; }
+  .row-item .amt.out { color: var(--danger); }
+  .row-item .amt.in { color: var(--positive); }
+  .badge {
+    display: inline-block; font-size: 10.5px; padding: 2px 7px; border-radius: 20px;
+    margin-top: 4px; font-weight: 500;
+  }
+  .badge.pending { background: var(--danger-bg); color: var(--danger); }
+  .badge.done { background: rgba(111,191,123,0.12); color: var(--positive); }
+  .del-btn {
+    background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px;
+    font-size: 16px; line-height: 1; opacity: 0.6;
+  }
+  .del-btn:hover { opacity: 1; color: var(--danger); }
+  .empty { color: var(--text-dim); font-size: 13.5px; padding: 18px 4px; text-align: center; }
+
+  /* ---------- forms ---------- */
+  .fab {
+    width: 100%; padding: 12px; border-radius: 12px; border: 1px dashed var(--border);
+    background: transparent; color: var(--text-dim); font-size: 13.5px; cursor: pointer;
+    margin-bottom: 4px;
+  }
+  .fab.pessoal:hover { border-color: var(--accent-pessoal); color: var(--accent-pessoal); }
+  .fab.berga:hover { border-color: var(--accent-berga); color: var(--accent-berga); }
+  form.entry {
+    background: var(--surface-2); border-radius: 12px; padding: 14px; margin-bottom: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  form.entry .fr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  form.entry label { font-size: 11.5px; color: var(--text-dim); display: block; margin-bottom: 4px; }
+  form.entry input, form.entry select, form.entry textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 9px 10px; font-size: 14px; font-family: inherit;
+  }
+  form.entry input:focus, form.entry select:focus, form.entry textarea:focus {
+    outline: 2px solid var(--accent-pessoal); outline-offset: 1px;
+  }
+  form.entry .chk { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); }
+  form.entry .chk input { width: auto; }
+  form.entry .actions { display: flex; gap: 8px; margin-top: 2px; }
+  form.entry .actions button {
+    flex: 1; padding: 10px; border-radius: 9px; border: none; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  }
+  .btn-save { background: var(--text); color: var(--bg); }
+  .btn-cancel { background: var(--surface); color: var(--text-dim); border: 1px solid var(--border) !important; }
+
+  /* ---------- edicao picker ---------- */
+  .edicao-pills { display: flex; gap: 7px; overflow-x: auto; padding: 2px 2px 12px; -webkit-overflow-scrolling: touch; }
+  .edicao-pills::-webkit-scrollbar { display: none; }
+  .pill {
+    flex-shrink: 0; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-dim); font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .pill.active { background: var(--accent-berga-bg); border-color: var(--accent-berga); color: var(--accent-berga); font-weight: 600; }
+  .pill.add { border-style: dashed; }
+
+  .lucro-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; }
+  .lucro-row .k { color: var(--text-dim); font-size: 13px; }
+  .lucro-row .v { font-size: 14.5px; font-weight: 600; }
+  .lucro-total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
+  .lucro-total .v { font-size: 20px; }
+  .lucro-total .v.pos { color: var(--positive); }
+  .lucro-total .v.neg { color: var(--danger); }
+
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--positive); display: inline-block; margin-right: 5px; }
+  .loading-msg { text-align: center; color: var(--text-dim); padding: 60px 20px; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div id="authScreen">
+  <div class="auth-box">
+    <h1>Finanças</h1>
+    <div class="tag">Pessoal &amp; Bêrga — acesso privado de vocês duas</div>
+    <div class="auth-tabs">
+      <button data-authtab="entrar" class="active">Entrar</button>
+      <button data-authtab="cadastrar">Criar conta</button>
+    </div>
+    <form id="authForm">
+      <div>
+        <label>E-mail</label>
+        <input required type="email" id="authEmail" autocomplete="email">
+      </div>
+      <div>
+        <label>Senha</label>
+        <input required type="password" id="authPassword" autocomplete="current-password" minlength="6">
+      </div>
+      <button type="submit" class="btn-primary" id="authSubmit">Entrar</button>
+    </form>
+    <div id="authMsg"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="top">
+    <div>
+      <h1>Finanças</h1>
+      <div class="sub" id="syncStatus">conectando…</div>
+    </div>
+    <button id="logoutBtn">Sair</button>
+  </header>
+  <div id="content"><div class="loading-msg">Carregando…</div></div>
+</div>
+
+<nav class="tabs">
+  <div class="row">
+    <button data-tab="painel" class="active">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      Painel
+    </button>
+    <button data-tab="pessoal">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/></svg>
+      Pessoal
+    </button>
+    <button data-tab="berga">
+      <svg viewBox="0 0 24 24"><path d="M3 10l9-6 9 6-9 6-9-6z"/><path d="M7 12.5V17c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5v-4.5"/></svg>
+      Bêrga
+    </button>
+    <button data-tab="contas">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17"/><path d="M7 13.5h4"/></svg>
+      Contas
+    </button>
+  </div>
+</nav>
+
+<script>
+(function () {
+  "use strict";
+
+  var SUPABASE_URL = "https://wkjtlgjarwbfsqgxpqjl.supabase.co";
+  var SUPABASE_ANON_KEY = "sb_publishable_T1wSKurjwRY_MYsXEQV64Q_pVCf29JU";
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  var state = {
+    ready: false,
+    entradasPessoal: [],
+    saidasPessoal: [],
+    entradasBerga: [],
+    saidasBerga: [],
+    edicoes: [],
+    tab: "painel",
+    subtabPessoal: "entradas",
+    subtabBerga: "entradas",
+    edicaoAtual: null,
+    openForm: null
+  };
+
+  var TABLES = ["entradas_pessoal", "saidas_pessoal", "entradas_berga", "saidas_berga", "edicoes"];
+  var KEY_BY_TABLE = {
+    entradas_pessoal: "entradasPessoal",
+    saidas_pessoal: "saidasPessoal",
+    entradas_berga: "entradasBerga",
+    saidas_berga: "saidasBerga",
+    edicoes: "edicoes"
+  };
+
+  var CAT_ENTRADA_PESSOAL = ["Salário", "Freela", "Pensão", "Venda", "A receber de alguém", "Outra"];
+  var CAT_SAIDA_PESSOAL = ["Plano Arthur", "Remédios", "Faculdade", "Passagens", "Uber", "Alimentação", "Claro", "Cartão", "Lazer", "Outro"];
+  var CAT_SAIDA_BERGA = ["Atrações", "Fotografia", "Videomaker", "Designer", "Materiais", "Brindes", "Impressão", "Decoração", "Aluguel/Estrutura", "Divulgação", "Outro"];
+  var FORMAS_PAG = ["Pix", "Cartão", "Dinheiro", "Transferência"];
+
+  function fmt(n) {
+    n = Number(n) || 0;
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  function fmtDate(d) {
+    if (!d) return "";
+    var parts = d.split("-");
+    if (parts.length !== 3) return d;
+    return parts[2] + "/" + parts[1] + "/" + parts[0].slice(2);
+  }
+  function todayISO() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function isThisMonth(d) {
+    if (!d) return false;
+    var t = todayISO().slice(0, 7);
+    return d.slice(0, 7) === t;
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ---------------- AUTH ----------------
+  var authMode = "entrar";
+  document.querySelectorAll("[data-authtab]").forEach(function (b) {
+    b.onclick = function () {
+      authMode = b.dataset.authtab;
+      document.querySelectorAll("[data-authtab]").forEach(function (x) { x.classList.toggle("active", x === b); });
+      document.getElementById("authSubmit").textContent = authMode === "entrar" ? "Entrar" : "Criar conta";
+      document.getElementById("authMsg").innerHTML = "";
+    };
+  });
+
+  document.getElementById("authForm").onsubmit = async function (ev) {
+    ev.preventDefault();
+    var email = document.getElementById("authEmail").value.trim();
+    var password = document.getElementById("authPassword").value;
+    var msg = document.getElementById("authMsg");
+    var btn = document.getElementById("authSubmit");
+    msg.innerHTML = "";
+    btn.disabled = true;
+    btn.textContent = authMode === "entrar" ? "Entrando…" : "Criando…";
+    try {
+      if (authMode === "entrar") {
+        var r = await sb.auth.signInWithPassword({ email: email, password: password });
+        if (r.error) throw r.error;
+      } else {
+        var r2 = await sb.auth.signUp({ email: email, password: password });
+        if (r2.error) throw r2.error;
+        if (r2.data && r2.data.user && !r2.data.session) {
+          msg.innerHTML = '<div class="auth-msg ok">Conta criada! Verifique seu e-mail para confirmar antes de entrar.</div>';
+        }
+      }
+    } catch (err) {
+      msg.innerHTML = '<div class="auth-msg error">' + esc(traduzErro(err.message)) + '</div>';
+    }
+    btn.disabled = false;
+    btn.textContent = authMode === "entrar" ? "Entrar" : "Criar conta";
+  };
+
+  function traduzErro(m) {
+    if (!m) return "Algo deu errado. Tente de novo.";
+    if (/invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
+    if (/already registered|already exists/i.test(m)) return "Esse e-mail já tem conta — tenta entrar.";
+    if (/password.*at least|should be at least/i.test(m)) return "A senha precisa ter pelo menos 6 caracteres.";
+    if (/email not confirmed/i.test(m)) return "Confirme seu e-mail antes de entrar (verifique a caixa de entrada).";
+    return m;
+  }
+
+  document.getElementById("logoutBtn").onclick = function () { sb.auth.signOut(); };
+
+  var subscriptions = [];
+  sb.auth.onAuthStateChange(function (event, session) {
+    if (session) {
+      document.getElementById("authScreen").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      document.querySelector("nav.tabs").style.display = "block";
+      startSync();
+    } else {
+      document.getElementById("authScreen").style.display = "flex";
+      document.getElementById("app").style.display = "none";
+      document.querySelector("nav.tabs").style.display = "none";
+      subscriptions.forEach(function (ch) { sb.removeChannel(ch); });
+      subscriptions = [];
+      state.ready = false;
+    }
+  });
+
+  // ---------------- DATA SYNC ----------------
+  var syncedCount = 0;
+  function startSync() {
+    document.getElementById("syncStatus").innerHTML = '<span class="sync-dot"></span>sincronizado';
+    syncedCount = 0;
+    TABLES.forEach(function (table) {
+      fetchTable(table);
+      var ch = sb.channel(table + "_changes")
+        .on("postgres_changes", { event: "*", schema: "public", table: table }, function () { fetchTable(table); })
+        .subscribe();
+      subscriptions.push(ch);
+    });
+  }
+
+  async function fetchTable(table) {
+    var q = sb.from(table).select("*");
+    q = table === "edicoes" ? q.order("data", { ascending: true }) : q.order("data", { ascending: false });
+    var res = await q;
+    if (res.error) return;
+    var key = KEY_BY_TABLE[table];
+    state[key] = res.data || [];
+    if (table === "edicoes" && !state.edicaoAtual && state.edicoes.length) {
+      state.edicaoAtual = state.edicoes[0].id;
+    }
+    syncedCount++;
+    if (syncedCount >= TABLES.length) state.ready = true;
+    if (state.ready) render();
+  }
+
+  // ---------------- computed ----------------
+  function totalRecebidoPessoal() {
+    return state.entradasPessoal.filter(function (e) { return e.status === "recebido"; })
+      .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+  }
+  function totalPagoPessoal() {
+    return state.saidasPessoal.filter(function (e) { return e.status === "pago"; })
+      .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+  }
+  function totalPagoBerga() {
+    return state.entradasBerga.reduce(function (s, e) { return s + Number(e.valor_pago || 0); }, 0);
+  }
+  function totalSaidaBerga() {
+    return state.saidasBerga.filter(function (e) { return e.status === "pago"; })
+      .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+  }
+  function saldoPessoal() { return totalRecebidoPessoal() - totalPagoPessoal(); }
+  function saldoBerga() { return totalPagoBerga() - totalSaidaBerga(); }
+
+  function entradasMes() {
+    var a = state.entradasPessoal.filter(function (e) { return e.status === "recebido" && isThisMonth(e.data); })
+      .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+    var b = state.entradasBerga.filter(function (e) { return isThisMonth(e.data); })
+      .reduce(function (s, e) { return s + Number(e.valor_pago || 0); }, 0);
+    return a + b;
+  }
+  function saidasMes() {
+    var a = state.saidasPessoal.filter(function (e) { return e.status === "pago" && isThisMonth(e.data); })
+      .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+    var b = state.saidasBerga.filter(function (e) { return e.status === "pago" && isThisMonth(e.data); })
+      .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+    return a + b;
+  }
+
+  function aReceber() {
+    var list = [];
+    state.entradasPessoal.filter(function (e) { return e.status === "a_receber"; }).forEach(function (e) {
+      list.push({ desc: e.categoria + (e.obs ? " — " + e.obs : ""), valor: Number(e.valor || 0), data: e.data, origem: "pessoal" });
+    });
+    state.entradasBerga.forEach(function (e) {
+      var pend = Number(e.valor_total || 0) - Number(e.valor_pago || 0);
+      if (pend > 0.004) {
+        var ed = state.edicoes.find(function (x) { return x.id === e.edicao_id; });
+        list.push({ desc: e.marca + " — " + (ed ? ed.nome : "edição"), valor: pend, data: e.data, origem: "berga" });
+      }
+    });
+    list.sort(function (a, b) { return (a.data || "").localeCompare(b.data || ""); });
+    return list;
+  }
+  function aPagar() {
+    var list = [];
+    state.saidasPessoal.filter(function (e) { return e.status === "a_pagar"; }).forEach(function (e) {
+      list.push({ desc: e.categoria + (e.obs ? " — " + e.obs : ""), valor: Number(e.valor || 0), data: e.data, origem: "pessoal" });
+    });
+    state.saidasBerga.filter(function (e) { return e.status === "a_pagar"; }).forEach(function (e) {
+      var ed = state.edicoes.find(function (x) { return x.id === e.edicao_id; });
+      list.push({ desc: e.categoria + " — " + (ed ? ed.nome : "edição"), valor: Number(e.valor || 0), data: e.data, origem: "berga" });
+    });
+    list.sort(function (a, b) { return (a.data || "").localeCompare(b.data || ""); });
+    return list;
+  }
+
+  // ---------------- render ----------------
+  function render() {
+    document.querySelectorAll("nav.tabs button").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.tab === state.tab);
+    });
+    var el = document.getElementById("content");
+    if (!state.ready) { el.innerHTML = '<div class="loading-msg">Carregando…</div>'; return; }
+    if (state.tab === "painel") el.innerHTML = renderPainel();
+    else if (state.tab === "pessoal") el.innerHTML = renderPessoal();
+    else if (state.tab === "berga") el.innerHTML = renderBerga();
+    else if (state.tab === "contas") el.innerHTML = renderContas();
+    attachHandlers();
+  }
+
+  function renderPainel() {
+    var disp = saldoPessoal() + saldoBerga();
+    var pend = aReceber().length + aPagar().length;
+    var proximas = aPagar().slice(0, 4);
+    var html = '';
+    html += '<div class="grid2">';
+    html += '<div class="stat pessoal"><div class="label">Saldo pessoal</div><div class="value num">' + fmt(saldoPessoal()) + '</div></div>';
+    html += '<div class="stat berga"><div class="label">Saldo Bêrga</div><div class="value num">' + fmt(saldoBerga()) + '</div></div>';
+    html += '<div class="stat"><div class="label">Entradas do mês</div><div class="value num" style="color:var(--positive)">' + fmt(entradasMes()) + '</div></div>';
+    html += '<div class="stat"><div class="label">Saídas do mês</div><div class="value num" style="color:var(--danger)">' + fmt(saidasMes()) + '</div></div>';
+    html += '<div class="stat wide"><div class="label">Disponível (pessoal + Bêrga)</div><div class="value num">' + fmt(disp) + '</div></div>';
+    html += '</div>';
+
+    html += '<div class="section-title">A vencer / a receber</div>';
+    html += '<div class="card">';
+    if (!proximas.length) {
+      html += '<div class="empty">Nada pendente por aqui. Bom sinal.</div>';
+    } else {
+      proximas.forEach(function (i) {
+        html += rowItem(i.desc, fmtDate(i.data), fmt(i.valor), 'out', null);
+      });
+      if (pend > proximas.length) html += '<div class="empty" style="padding-top:8px">e mais ' + (pend - proximas.length) + ' pendência(s) — veja em Contas</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function rowItem(cat, meta, amt, cls, delAttr, badge) {
+    var h = '<div class="row-item">';
+    h += '<div class="left"><div class="cat">' + esc(cat) + '</div>';
+    if (meta) h += '<div class="meta">' + esc(meta) + '</div>';
+    if (badge) h += '<span class="badge ' + badge.cls + '">' + esc(badge.text) + '</span>';
+    h += '</div>';
+    h += '<div class="right"><div class="amt num ' + (cls || '') + '">' + amt + '</div>';
+    if (delAttr) h += '<button class="del-btn" data-del="' + delAttr + '">✕</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  function renderPessoal() {
+    var html = '<div class="subtabs">';
+    html += '<button data-subtab-pessoal="entradas" class="' + (state.subtabPessoal === "entradas" ? "active" : "") + '">Entradas</button>';
+    html += '<button data-subtab-pessoal="saidas" class="' + (state.subtabPessoal === "saidas" ? "active" : "") + '">Saídas</button>';
+    html += '</div>';
+
+    if (state.subtabPessoal === "entradas") {
+      html += state.openForm === "entradaPessoal" ? formEntradaPessoal() : '<button class="fab pessoal" data-open="entradaPessoal">+ Nova entrada</button>';
+      html += '<div class="card" style="margin-top:12px">';
+      var list = state.entradasPessoal;
+      if (!list.length) html += '<div class="empty">Nenhuma entrada lançada ainda.</div>';
+      list.forEach(function (e) {
+        html += rowItem(e.categoria, fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'in', "entradas_pessoal:" + e.id,
+          e.status === "a_receber" ? { cls: "pending", text: "a receber" } : { cls: "done", text: "recebido" });
+      });
+      html += '</div>';
+    } else {
+      html += state.openForm === "saidaPessoal" ? formSaidaPessoal() : '<button class="fab pessoal" data-open="saidaPessoal">+ Nova saída</button>';
+      html += '<div class="card" style="margin-top:12px">';
+      var list2 = state.saidasPessoal;
+      if (!list2.length) html += '<div class="empty">Nenhuma saída lançada ainda.</div>';
+      list2.forEach(function (e) {
+        html += rowItem(e.categoria + (e.fixo ? " (fixo)" : ""), fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'out', "saidas_pessoal:" + e.id,
+          e.status === "a_pagar" ? { cls: "pending", text: "a pagar" } : { cls: "done", text: "pago" });
+      });
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function formEntradaPessoal() {
+    var opts = CAT_ENTRADA_PESSOAL.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join("");
+    return '<form class="entry" data-form="entradaPessoal">' +
+      '<div class="fr"><div><label>Valor (R$)</label><input required type="number" step="0.01" min="0" name="valor"></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
+      '<div><label>Categoria</label><select name="categoria">' + opts + '</select></div>' +
+      '<div><label>Status</label><select name="status"><option value="recebido">Recebido</option><option value="a_receber">A receber</option></select></div>' +
+      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Salvar</button></div>' +
+      '</form>';
+  }
+  function formSaidaPessoal() {
+    var opts = CAT_SAIDA_PESSOAL.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join("");
+    return '<form class="entry" data-form="saidaPessoal">' +
+      '<div class="fr"><div><label>Valor (R$)</label><input required type="number" step="0.01" min="0" name="valor"></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
+      '<div><label>Categoria</label><select name="categoria">' + opts + '</select></div>' +
+      '<label class="chk"><input type="checkbox" name="fixo"> Gasto fixo mensal</label>' +
+      '<div><label>Status</label><select name="status"><option value="pago">Pago</option><option value="a_pagar">A pagar</option></select></div>' +
+      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Salvar</button></div>' +
+      '</form>';
+  }
+
+  function renderBerga() {
+    var html = '<div class="edicao-pills">';
+    state.edicoes.forEach(function (ed) {
+      html += '<button class="pill ' + (state.edicaoAtual === ed.id ? "active" : "") + '" data-edicao="' + ed.id + '">' + esc(ed.nome) + '</button>';
+    });
+    html += '<button class="pill add" data-open="edicao">+ edição</button>';
+    html += '</div>';
+
+    if (state.openForm === "edicao") html += formEdicao();
+
+    if (!state.edicoes.length) {
+      html += '<div class="card"><div class="empty">Cadastre a primeira edição da Bêrga para começar a lançar inscrições e gastos.</div></div>';
+      return html;
+    }
+    var ed = state.edicoes.find(function (e) { return e.id === state.edicaoAtual; }) || state.edicoes[0];
+    if (!ed) return html;
+
+    var entradasEd = state.entradasBerga.filter(function (e) { return e.edicao_id === ed.id; });
+    var saidasEd = state.saidasBerga.filter(function (e) { return e.edicao_id === ed.id; });
+    var receita = entradasEd.reduce(function (s, e) { return s + Number(e.valor_pago || 0); }, 0);
+    var gasto = saidasEd.filter(function (e) { return e.status === "pago"; }).reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+    var lucro = receita - gasto;
+
+    html += '<div class="card"><h3 style="margin:0 0 8px;font-size:16px">' + esc(ed.nome) + '</h3>';
+    html += '<div class="lucro-row"><span class="k">Receita de inscrições (recebido)</span><span class="v num" style="color:var(--positive)">' + fmt(receita) + '</span></div>';
+    html += '<div class="lucro-row"><span class="k">Gastos da edição (pagos)</span><span class="v num" style="color:var(--danger)">' + fmt(gasto) + '</span></div>';
+    html += '<div class="lucro-row lucro-total"><span class="k">Lucro da edição</span><span class="v num ' + (lucro >= 0 ? "pos" : "neg") + '">' + fmt(lucro) + '</span></div>';
+    html += '</div>';
+
+    html += '<div class="subtabs">';
+    html += '<button data-subtab-berga="entradas" class="' + (state.subtabBerga === "entradas" ? "active" : "") + '">Inscrições</button>';
+    html += '<button data-subtab-berga="saidas" class="' + (state.subtabBerga === "saidas" ? "active" : "") + '">Gastos</button>';
+    html += '</div>';
+
+    if (state.subtabBerga === "entradas") {
+      html += state.openForm === "entradaBerga" ? formEntradaBerga(ed) : '<button class="fab berga" data-open="entradaBerga">+ Nova inscrição</button>';
+      html += '<div class="card" style="margin-top:12px">';
+      if (!entradasEd.length) html += '<div class="empty">Nenhuma inscrição lançada para esta edição.</div>';
+      entradasEd.forEach(function (e) {
+        var pend = Number(e.valor_total || 0) - Number(e.valor_pago || 0);
+        html += rowItem(e.marca, fmtDate(e.data) + " · " + (e.forma || "") + (pend > 0.004 ? " · falta " + fmt(pend) : ""),
+          fmt(e.valor_total), 'in', "entradas_berga:" + e.id,
+          pend > 0.004 ? { cls: "pending", text: "parcial" } : { cls: "done", text: "quitado" });
+      });
+      html += '</div>';
+    } else {
+      html += state.openForm === "saidaBerga" ? formSaidaBerga(ed) : '<button class="fab berga" data-open="saidaBerga">+ Novo gasto</button>';
+      html += '<div class="card" style="margin-top:12px">';
+      if (!saidasEd.length) html += '<div class="empty">Nenhum gasto lançado para esta edição.</div>';
+      saidasEd.forEach(function (e) {
+        html += rowItem(e.categoria, fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'out', "saidas_berga:" + e.id,
+          e.status === "a_pagar" ? { cls: "pending", text: "a pagar" } : { cls: "done", text: "pago" });
+      });
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function formEdicao() {
+    return '<form class="entry" data-form="edicao">' +
+      '<div><label>Nome da edição</label><input required type="text" name="nome" placeholder="ex.: 17/10 ou 09–14/11"></div>' +
+      '<div><label>Data de início</label><input required type="date" name="data" value="' + todayISO() + '"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Criar edição</button></div>' +
+      '</form>';
+  }
+  function formEntradaBerga(ed) {
+    var opts = FORMAS_PAG.map(function (f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join("");
+    return '<form class="entry" data-form="entradaBerga">' +
+      '<div><label>Marca / expositor</label><input required type="text" name="marca"></div>' +
+      '<div class="fr"><div><label>Valor total (R$)</label><input required type="number" step="0.01" min="0" name="valor_total"></div>' +
+      '<div><label>Já pago (R$)</label><input required type="number" step="0.01" min="0" name="valor_pago" value="0"></div></div>' +
+      '<div class="fr"><div><label>Forma</label><select name="forma">' + opts + '</select></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Salvar</button></div>' +
+      '</form>';
+  }
+  function formSaidaBerga(ed) {
+    var opts = CAT_SAIDA_BERGA.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join("");
+    return '<form class="entry" data-form="saidaBerga">' +
+      '<div class="fr"><div><label>Valor (R$)</label><input required type="number" step="0.01" min="0" name="valor"></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
+      '<div><label>Categoria</label><select name="categoria">' + opts + '</select></div>' +
+      '<div><label>Status</label><select name="status"><option value="pago">Pago</option><option value="a_pagar">A pagar</option></select></div>' +
+      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Salvar</button></div>' +
+      '</form>';
+  }
+
+  function renderContas() {
+    var rec = aReceber(), pag = aPagar();
+    var totRec = rec.reduce(function (s, i) { return s + i.valor; }, 0);
+    var totPag = pag.reduce(function (s, i) { return s + i.valor; }, 0);
+    var html = '';
+    html += '<div class="grid2">';
+    html += '<div class="stat"><div class="label">Total a receber</div><div class="value num" style="color:var(--positive)">' + fmt(totRec) + '</div></div>';
+    html += '<div class="stat"><div class="label">Total a pagar</div><div class="value num" style="color:var(--danger)">' + fmt(totPag) + '</div></div>';
+    html += '</div>';
+
+    html += '<div class="section-title">A receber</div><div class="card">';
+    if (!rec.length) html += '<div class="empty">Nada pendente de recebimento.</div>';
+    rec.forEach(function (i) {
+      html += rowItem(i.desc, fmtDate(i.data) + " · " + (i.origem === "berga" ? "Bêrga" : "pessoal"), fmt(i.valor), 'in');
+    });
+    html += '</div>';
+
+    html += '<div class="section-title">A pagar</div><div class="card">';
+    if (!pag.length) html += '<div class="empty">Nada pendente de pagamento.</div>';
+    pag.forEach(function (i) {
+      var vencido = i.data && i.data < todayISO();
+      html += rowItem(i.desc, (vencido ? "vencida · " : "") + fmtDate(i.data) + " · " + (i.origem === "berga" ? "Bêrga" : "pessoal"), fmt(i.valor), 'out');
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // ---------------- events ----------------
+  function attachHandlers() {
+    var c = document.getElementById("content");
+
+    c.querySelectorAll("[data-open]").forEach(function (b) {
+      b.onclick = function () { state.openForm = b.dataset.open; render(); };
+    });
+    c.querySelectorAll("[data-close]").forEach(function (b) {
+      b.onclick = function () { state.openForm = null; render(); };
+    });
+    c.querySelectorAll("[data-subtab-pessoal]").forEach(function (b) {
+      b.onclick = function () { state.subtabPessoal = b.dataset.subtabPessoal; state.openForm = null; render(); };
+    });
+    c.querySelectorAll("[data-subtab-berga]").forEach(function (b) {
+      b.onclick = function () { state.subtabBerga = b.dataset.subtabBerga; state.openForm = null; render(); };
+    });
+    c.querySelectorAll("[data-edicao]").forEach(function (b) {
+      b.onclick = function () { state.edicaoAtual = b.dataset.edicao; state.openForm = null; render(); };
+    });
+    c.querySelectorAll("[data-del]").forEach(function (b) {
+      b.onclick = async function () {
+        var parts = b.dataset.del.split(":");
+        try { await sb.from(parts[0]).delete().eq("id", parts[1]); fetchTable(parts[0]); } catch (e) {}
+      };
+    });
+
+    var form = c.querySelector("form.entry");
+    if (form) form.onsubmit = async function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      var kind = form.dataset.form;
+      var btn = form.querySelector(".btn-save");
+      btn.disabled = true; btn.textContent = "Salvando…";
+      try {
+        if (kind === "entradaPessoal") {
+          await sb.from("entradas_pessoal").insert([{ valor: parseFloat(fd.get("valor")) || 0, data: fd.get("data"), categoria: fd.get("categoria"), status: fd.get("status"), obs: fd.get("obs") || "" }]);
+          fetchTable("entradas_pessoal");
+        } else if (kind === "saidaPessoal") {
+          await sb.from("saidas_pessoal").insert([{ valor: parseFloat(fd.get("valor")) || 0, data: fd.get("data"), categoria: fd.get("categoria"), fixo: fd.get("fixo") === "on", status: fd.get("status"), obs: fd.get("obs") || "" }]);
+          fetchTable("saidas_pessoal");
+        } else if (kind === "edicao") {
+          var res = await sb.from("edicoes").insert([{ nome: fd.get("nome"), data: fd.get("data") }]).select();
+          if (res.data && res.data[0]) state.edicaoAtual = res.data[0].id;
+          fetchTable("edicoes");
+        } else if (kind === "entradaBerga") {
+          await sb.from("entradas_berga").insert([{ edicao_id: state.edicaoAtual, marca: fd.get("marca"), valor_total: parseFloat(fd.get("valor_total")) || 0, valor_pago: parseFloat(fd.get("valor_pago")) || 0, forma: fd.get("forma"), data: fd.get("data") }]);
+          fetchTable("entradas_berga");
+        } else if (kind === "saidaBerga") {
+          await sb.from("saidas_berga").insert([{ edicao_id: state.edicaoAtual, valor: parseFloat(fd.get("valor")) || 0, data: fd.get("data"), categoria: fd.get("categoria"), status: fd.get("status"), obs: fd.get("obs") || "" }]);
+          fetchTable("saidas_berga");
+        }
+        state.openForm = null;
+        render();
+      } catch (e) {
+        btn.disabled = false; btn.textContent = "Salvar";
+      }
+    };
+  }
+
+  document.querySelectorAll("nav.tabs button").forEach(function (b) {
+    b.onclick = function () { state.tab = b.dataset.tab; state.openForm = null; render(); };
+  });
+})();
+</script>
+</body>
+</html>
