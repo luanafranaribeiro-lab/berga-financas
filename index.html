@@ -24,6 +24,9 @@
     --accent-violet: #8C7EF6;
     --accent-violet-2: #5B4FD9;
     --accent-violet-bg: rgba(140,126,246,0.14);
+    --accent-brecho: #C2578A;
+    --accent-brecho-2: #8E3466;
+    --accent-brecho-bg: rgba(194,87,138,0.14);
     --danger: #E2685C;
     --danger-bg: rgba(226,104,92,0.12);
     --positive: #6FBF7B;
@@ -46,6 +49,9 @@
       --accent-violet: #6C5CE7;
       --accent-violet-2: #4B3FB8;
       --accent-violet-bg: rgba(108,92,231,0.10);
+      --accent-brecho: #A8447A;
+      --accent-brecho-2: #7A2D58;
+      --accent-brecho-bg: rgba(168,68,122,0.10);
       --danger: #C2493D;
       --danger-bg: rgba(194,73,61,0.10);
       --positive: #2F8F45;
@@ -60,6 +66,7 @@
     --accent-pessoal: #2C9186; --accent-pessoal-bg: rgba(44,145,134,0.10);
     --accent-berga: #E0592A; --accent-berga-2: #B8431E; --accent-berga-bg: rgba(224,89,42,0.10);
     --accent-violet: #6C5CE7; --accent-violet-2: #4B3FB8; --accent-violet-bg: rgba(108,92,231,0.10);
+    --accent-brecho: #A8447A; --accent-brecho-2: #7A2D58; --accent-brecho-bg: rgba(168,68,122,0.10);
     --danger: #C2493D; --danger-bg: rgba(194,73,61,0.10); --positive: #2F8F45;
     --shadow: 0 8px 24px rgba(0,0,0,0.08); color-scheme: light;
   }
@@ -144,6 +151,8 @@
   nav.tabs button.active svg { stroke: var(--text); }
   nav.tabs button[data-tab="berga"].active { color: var(--accent-berga); }
   nav.tabs button[data-tab="berga"].active svg { stroke: var(--accent-berga); }
+  nav.tabs button[data-tab="brecho"].active { color: var(--accent-brecho); }
+  nav.tabs button[data-tab="brecho"].active svg { stroke: var(--accent-brecho); }
 
   /* ---------- cards / sections ---------- */
   .card {
@@ -167,6 +176,7 @@
   }
   .hero.v { background: linear-gradient(135deg, var(--accent-violet), var(--accent-violet-2)); }
   .hero.o { background: linear-gradient(135deg, var(--accent-berga), var(--accent-berga-2)); }
+  .hero.b { background: linear-gradient(135deg, var(--accent-brecho), var(--accent-brecho-2)); }
   .hero .top-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
   .hero .label { font-size: 12.5px; opacity: 0.82; margin-bottom: 6px; }
   .hero .value { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
@@ -343,6 +353,10 @@
       <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="7.5" cy="14.5" r="1"/><path d="M3 6l9-3 9 3"/></svg>
       Bancos
     </button>
+    <button data-tab="brecho">
+      <svg viewBox="0 0 24 24"><path d="M6 8h12l1.5 12.5a1.5 1.5 0 01-1.5 1.5H6a1.5 1.5 0 01-1.5-1.5L6 8z"/><path d="M9 8V6a3 3 0 016 0v2"/></svg>
+      Brechó
+    </button>
   </div>
 </nav>
 
@@ -370,10 +384,14 @@
     bancos: [],
     faturas: [],
     bancoAtual: null,
-    faturaCartaoId: null
+    faturaCartaoId: null,
+    garimpos: [],
+    embalagens: [],
+    eventosBrecho: [],
+    eventoBrechoAtual: null
   };
 
-  var TABLES = ["entradas_pessoal", "saidas_pessoal", "entradas_berga", "saidas_berga", "edicoes", "bancos", "faturas_cartao"];
+  var TABLES = ["entradas_pessoal", "saidas_pessoal", "entradas_berga", "saidas_berga", "edicoes", "bancos", "faturas_cartao", "brecho_garimpos", "brecho_embalagens", "brecho_eventos"];
   var KEY_BY_TABLE = {
     entradas_pessoal: "entradasPessoal",
     saidas_pessoal: "saidasPessoal",
@@ -381,7 +399,10 @@
     saidas_berga: "saidasBerga",
     edicoes: "edicoes",
     bancos: "bancos",
-    faturas_cartao: "faturas"
+    faturas_cartao: "faturas",
+    brecho_garimpos: "garimpos",
+    brecho_embalagens: "embalagens",
+    brecho_eventos: "eventosBrecho"
   };
 
   var CAT_ENTRADA_PESSOAL = ["Salário", "Freela", "Pensão", "Venda", "A receber de alguém", "Outra"];
@@ -580,6 +601,7 @@
     if (table === "edicoes") q = q.order("data", { ascending: true });
     else if (table === "bancos") q = q.order("tipo", { ascending: true }).order("nome", { ascending: true });
     else if (table === "faturas_cartao") q = q.order("mes", { ascending: true });
+    else if (table === "brecho_eventos") q = q.order("data", { ascending: true });
     else q = q.order("data", { ascending: false });
     var res = await q;
     if (res.error) return;
@@ -590,6 +612,9 @@
     }
     if (table === "bancos" && !state.bancoAtual && state.bancos.length) {
       state.bancoAtual = state.bancos[0].id;
+    }
+    if (table === "brecho_eventos" && !state.eventoBrechoAtual && state.eventosBrecho.length) {
+      state.eventoBrechoAtual = state.eventosBrecho[0].id;
     }
     syncedCount++;
     if (syncedCount >= TABLES.length) state.ready = true;
@@ -676,6 +701,7 @@
     else if (state.tab === "berga") el.innerHTML = renderBerga();
     else if (state.tab === "contas") el.innerHTML = renderContas();
     else if (state.tab === "bancos") el.innerHTML = renderBancos();
+    else if (state.tab === "brecho") el.innerHTML = renderBrecho();
     attachHandlers();
   }
 
@@ -989,6 +1015,124 @@
       '</form>';
   }
 
+  // ---------------- Brechó ----------------
+  function custoPorPecaBrecho() {
+    var totalGarimpo = state.garimpos.reduce(function (s, g) { return s + Number(g.valor_garimpo || 0) + Number(g.valor_transporte || 0); }, 0);
+    var totalPecas = state.garimpos.reduce(function (s, g) { return s + Number(g.quantidade_pecas || 0); }, 0);
+    return totalPecas > 0 ? totalGarimpo / totalPecas : 0;
+  }
+  function estoqueBrecho() {
+    var totalPecas = state.garimpos.reduce(function (s, g) { return s + Number(g.quantidade_pecas || 0); }, 0);
+    var totalVendido = state.eventosBrecho.reduce(function (s, e) { return s + Number(e.quantidade_vendida || 0); }, 0);
+    return totalPecas - totalVendido;
+  }
+
+  function renderBrecho() {
+    var custoPeca = custoPorPecaBrecho();
+    var estoque = estoqueBrecho();
+    var totalInvestido = state.garimpos.reduce(function (s, g) { return s + Number(g.valor_garimpo || 0) + Number(g.valor_transporte || 0); }, 0);
+    var totalEmbalagem = state.embalagens.reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+    var totalArrecadado = state.eventosBrecho.reduce(function (s, e) { return s + Number(e.valor_arrecadado || 0); }, 0);
+    var lucroTotal = state.eventosBrecho.reduce(function (s, e) {
+      var custo = custoPeca * Number(e.quantidade_vendida || 0);
+      return s + (Number(e.valor_arrecadado || 0) - custo - Number(e.valor_inscricao || 0) - Number(e.valor_alimentacao || 0));
+    }, 0) - totalEmbalagem;
+
+    var html = heroCard('b', 'Lucro do brechó (todos os eventos)', fmt(lucroTotal), 'arrecadado ' + fmt(totalArrecadado) + ' · investido ' + fmt(totalInvestido), null, [
+      { k: 'Estoque atual', v: estoque + ' peça(s)' },
+      { k: 'Custo médio/peça', v: fmt(custoPeca) }
+    ]);
+
+    html += '<div class="section-title">Garimpos (compras de estoque)</div>';
+    html += (state.openForm === "garimpo") ? formGarimpo(state.editRecord) : '<button class="fab pessoal" data-open="garimpo">+ Novo garimpo</button>';
+    html += '<div class="card" style="margin-top:12px">';
+    if (!state.garimpos.length) html += '<div class="empty">Nenhum garimpo lançado ainda.</div>';
+    state.garimpos.forEach(function (g) {
+      var custoUnit = Number(g.quantidade_pecas) > 0 ? (Number(g.valor_garimpo || 0) + Number(g.valor_transporte || 0)) / Number(g.quantidade_pecas) : 0;
+      html += rowItem(g.quantidade_pecas + ' peça(s)', fmtDate(g.data) + ' · garimpo ' + fmt(g.valor_garimpo) + ' + transporte ' + fmt(g.valor_transporte) + ' · ' + fmt(custoUnit) + '/peça',
+        fmt(Number(g.valor_garimpo || 0) + Number(g.valor_transporte || 0)), 'out', "brecho_garimpos:" + g.id, "brecho_garimpos:" + g.id);
+    });
+    html += '</div>';
+
+    html += '<div class="section-title">Embalagens</div>';
+    html += (state.openForm === "embalagem") ? formEmbalagem(state.editRecord) : '<button class="fab pessoal" data-open="embalagem">+ Nova compra de embalagem</button>';
+    html += '<div class="card" style="margin-top:12px">';
+    if (!state.embalagens.length) html += '<div class="empty">Nenhuma embalagem lançada ainda.</div>';
+    state.embalagens.forEach(function (e) {
+      var unit = Number(e.quantidade) > 0 ? Number(e.valor || 0) / Number(e.quantidade) : 0;
+      html += rowItem(e.quantidade + ' unid.', fmtDate(e.data) + ' · ' + fmt(unit) + '/unid.' + (e.obs ? ' · ' + e.obs : ''), fmt(e.valor), 'out', "brecho_embalagens:" + e.id, "brecho_embalagens:" + e.id);
+    });
+    html += '</div>';
+
+    html += '<div class="section-title">Eventos de venda</div>';
+    html += '<div class="edicao-pills">';
+    state.eventosBrecho.forEach(function (ev) {
+      html += '<button class="pill ' + (state.eventoBrechoAtual === ev.id ? "active" : "") + '" data-evento-brecho="' + ev.id + '" style="' + (state.eventoBrechoAtual === ev.id ? 'background:var(--accent-brecho-bg);border-color:var(--accent-brecho);color:var(--accent-brecho)' : '') + '">' + esc(ev.nome) + '</button>';
+    });
+    html += '<button class="pill add" data-open="eventoBrecho">+ evento</button>';
+    html += '</div>';
+
+    if (state.openForm === "eventoBrecho") html += formEventoBrecho(state.editRecord);
+
+    if (!state.eventosBrecho.length) {
+      html += '<div class="card"><div class="empty">Cadastre o primeiro evento de venda do brechó.</div></div>';
+      return html;
+    }
+    var ev = state.eventosBrecho.find(function (x) { return x.id === state.eventoBrechoAtual; }) || state.eventosBrecho[0];
+    if (!ev) return html;
+
+    var custoVendido = custoPeca * Number(ev.quantidade_vendida || 0);
+    var lucroEv = Number(ev.valor_arrecadado || 0) - custoVendido - Number(ev.valor_inscricao || 0) - Number(ev.valor_alimentacao || 0);
+
+    if (state.openForm !== "eventoBrecho") {
+      html += '<div style="display:flex;justify-content:flex-end;gap:14px;margin:-8px 2px 10px;font-size:12px">' +
+        '<button class="del-btn" style="font-size:12px" data-edit="brecho_eventos:' + ev.id + '">✎ editar</button>' +
+        '<button class="del-btn" style="font-size:12px" data-del="brecho_eventos:' + ev.id + '">✕ excluir</button>' +
+        '</div>';
+    }
+
+    html += heroCard('b', ev.nome + ' — lucro do evento', fmt(lucroEv), ev.quantidade_vendida + ' peça(s) vendida(s) a ' + fmt(custoPeca) + '/peça de custo', null, [
+      { k: 'Arrecadado', v: fmt(ev.valor_arrecadado) },
+      { k: 'Custo das peças', v: fmt(custoVendido) },
+      { k: 'Inscrição', v: fmt(ev.valor_inscricao) },
+      { k: 'Alimentação', v: fmt(ev.valor_alimentacao) }
+    ]);
+
+    return html;
+  }
+
+  function formGarimpo(rec) {
+    return '<form class="entry" data-form="garimpo"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div class="fr"><div><label>Gasto de garimpo (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_garimpo" value="' + (rec ? toMoneyDisplay(rec.valor_garimpo) : "") + '"></div>' +
+      '<div><label>Gasto de transporte (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_transporte" value="' + (rec ? toMoneyDisplay(rec.valor_transporte) : "") + '"></div></div>' +
+      '<div class="fr"><div><label>Quantidade de peças</label><input required type="number" min="0" step="1" name="quantidade_pecas" value="' + (rec ? rec.quantidade_pecas : "") + '"></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + esc(rec ? rec.data : todayISO()) + '"></div></div>' +
+      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional" value="' + esc(rec ? rec.obs : "") + '"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
+      '</form>';
+  }
+  function formEmbalagem(rec) {
+    return '<form class="entry" data-form="embalagem"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div class="fr"><div><label>Valor (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor" value="' + (rec ? toMoneyDisplay(rec.valor) : "") + '"></div>' +
+      '<div><label>Quantidade (unid.)</label><input required type="number" min="0" step="1" name="quantidade" value="' + (rec ? rec.quantidade : "") + '"></div></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + esc(rec ? rec.data : todayISO()) + '"></div>' +
+      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional" value="' + esc(rec ? rec.obs : "") + '"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
+      '</form>';
+  }
+  function formEventoBrecho(rec) {
+    return '<form class="entry" data-form="eventoBrecho"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div><label>Nome do evento</label><input required type="text" name="nome" value="' + esc(rec ? rec.nome : "") + '"></div>' +
+      '<div class="fr"><div><label>Data</label><input required type="date" name="data" value="' + esc(rec ? rec.data : todayISO()) + '"></div>' +
+      '<div><label>Qtd. vendida</label><input required type="number" min="0" step="1" name="quantidade_vendida" value="' + (rec ? rec.quantidade_vendida : "") + '"></div></div>' +
+      '<div class="fr"><div><label>Inscrição (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_inscricao" value="' + (rec ? toMoneyDisplay(rec.valor_inscricao) : "") + '"></div>' +
+      '<div><label>Alimentação (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_alimentacao" value="' + (rec ? toMoneyDisplay(rec.valor_alimentacao) : "") + '"></div></div>' +
+      '<div><label>Total arrecadado (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_arrecadado" value="' + (rec ? toMoneyDisplay(rec.valor_arrecadado) : "") + '"></div>' +
+      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional" value="' + esc(rec ? rec.obs : "") + '"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
+      '</form>';
+  }
+
   // ---------------- events ----------------
   function attachHandlers() {
     var c = document.getElementById("content");
@@ -1012,6 +1156,9 @@
         else if (table === "bancos") list = state.bancos;
         else if (table === "faturas_cartao") list = state.faturas;
         else if (table === "edicoes") list = state.edicoes;
+        else if (table === "brecho_garimpos") list = state.garimpos;
+        else if (table === "brecho_embalagens") list = state.embalagens;
+        else if (table === "brecho_eventos") list = state.eventosBrecho;
         rec = (list || []).find(function (x) { return String(x.id) === id; });
         if (!rec) return;
         state.editRecord = rec;
@@ -1020,6 +1167,9 @@
         else if (table === "bancos") state.openForm = rec.tipo === "cartao" ? "cartao" : "banco";
         else if (table === "faturas_cartao") { state.openForm = "fatura"; state.faturaCartaoId = rec.banco_id; }
         else if (table === "edicoes") state.openForm = "edicao";
+        else if (table === "brecho_garimpos") state.openForm = "garimpo";
+        else if (table === "brecho_embalagens") state.openForm = "embalagem";
+        else if (table === "brecho_eventos") state.openForm = "eventoBrecho";
         render();
       };
     });
@@ -1032,6 +1182,9 @@
     c.querySelectorAll("[data-edicao]").forEach(function (b) {
       b.onclick = function () { state.edicaoAtual = b.dataset.edicao; state.openForm = null; render(); };
     });
+    c.querySelectorAll("[data-evento-brecho]").forEach(function (b) {
+      b.onclick = function () { state.eventoBrechoAtual = b.dataset.eventoBrecho; state.openForm = null; render(); };
+    });
     c.querySelectorAll("[data-del]").forEach(function (b) {
       b.onclick = async function () {
         var parts = b.dataset.del.split(":");
@@ -1039,6 +1192,7 @@
         try {
           await sb.from(parts[0]).delete().eq("id", parts[1]);
           if (parts[0] === "edicoes" && state.edicaoAtual === parts[1]) state.edicaoAtual = null;
+          if (parts[0] === "brecho_eventos" && state.eventoBrechoAtual === parts[1]) state.eventoBrechoAtual = null;
           fetchTable(parts[0]);
           if (parts[0] === "edicoes") { fetchTable("entradas_berga"); fetchTable("saidas_berga"); }
         } catch (e) {}
@@ -1097,6 +1251,24 @@
           if (editId) { await sb.from("faturas_cartao").update(payloadFatura).eq("id", editId); }
           else { await sb.from("faturas_cartao").insert([payloadFatura]); }
           fetchTable("faturas_cartao");
+        } else if (kind === "garimpo") {
+          var payloadGarimpo = { valor_garimpo: parseMoney(fd.get("valor_garimpo")), valor_transporte: parseMoney(fd.get("valor_transporte")), quantidade_pecas: parseInt(fd.get("quantidade_pecas"), 10) || 0, data: fd.get("data"), obs: fd.get("obs") || "" };
+          if (editId) { await sb.from("brecho_garimpos").update(payloadGarimpo).eq("id", editId); }
+          else { await sb.from("brecho_garimpos").insert([payloadGarimpo]); }
+          fetchTable("brecho_garimpos");
+        } else if (kind === "embalagem") {
+          var payloadEmbalagem = { valor: parseMoney(fd.get("valor")), quantidade: parseInt(fd.get("quantidade"), 10) || 0, data: fd.get("data"), obs: fd.get("obs") || "" };
+          if (editId) { await sb.from("brecho_embalagens").update(payloadEmbalagem).eq("id", editId); }
+          else { await sb.from("brecho_embalagens").insert([payloadEmbalagem]); }
+          fetchTable("brecho_embalagens");
+        } else if (kind === "eventoBrecho") {
+          var payloadEventoB = { nome: fd.get("nome"), data: fd.get("data"), quantidade_vendida: parseInt(fd.get("quantidade_vendida"), 10) || 0, valor_inscricao: parseMoney(fd.get("valor_inscricao")), valor_alimentacao: parseMoney(fd.get("valor_alimentacao")), valor_arrecadado: parseMoney(fd.get("valor_arrecadado")), obs: fd.get("obs") || "" };
+          if (editId) { await sb.from("brecho_eventos").update(payloadEventoB).eq("id", editId); }
+          else {
+            var resEB = await sb.from("brecho_eventos").insert([payloadEventoB]).select();
+            if (resEB.data && resEB.data[0]) state.eventoBrechoAtual = resEB.data[0].id;
+          }
+          fetchTable("brecho_eventos");
         }
         state.openForm = null;
         state.editRecord = null;
