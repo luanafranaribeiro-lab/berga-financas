@@ -295,7 +295,10 @@
       </div>
       <div>
         <label>Senha</label>
-        <input required type="password" id="authPassword" autocomplete="current-password" minlength="6">
+        <div style="position:relative">
+          <input required type="password" id="authPassword" autocomplete="current-password" minlength="6" style="padding-right:40px">
+          <button type="button" id="togglePw" aria-label="Mostrar senha" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);cursor:pointer;padding:6px;font-size:16px;line-height:1">👁</button>
+        </div>
       </div>
       <button type="submit" class="btn-primary" id="authSubmit">Entrar</button>
     </form>
@@ -466,6 +469,18 @@
     };
   });
 
+  try {
+    var savedEmail = window.localStorage.getItem("financas_email");
+    if (savedEmail) document.getElementById("authEmail").value = savedEmail;
+  } catch (e) {}
+
+  document.getElementById("togglePw").onclick = function () {
+    var pw = document.getElementById("authPassword");
+    var isPw = pw.type === "password";
+    pw.type = isPw ? "text" : "password";
+    this.textContent = isPw ? "🙈" : "👁";
+  };
+
   document.getElementById("authForm").onsubmit = async function (ev) {
     ev.preventDefault();
     var email = document.getElementById("authEmail").value.trim();
@@ -479,9 +494,11 @@
       if (authMode === "entrar") {
         var r = await sb.auth.signInWithPassword({ email: email, password: password });
         if (r.error) throw r.error;
+        try { window.localStorage.setItem("financas_email", email); } catch (e) {}
       } else {
         var r2 = await sb.auth.signUp({ email: email, password: password });
         if (r2.error) throw r2.error;
+        try { window.localStorage.setItem("financas_email", email); } catch (e) {}
         if (r2.data && r2.data.user && !r2.data.session) {
           msg.innerHTML = '<div class="auth-msg ok">Conta criada! Verifique seu e-mail para confirmar antes de entrar.</div>';
         }
