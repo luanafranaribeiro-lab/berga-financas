@@ -1103,6 +1103,17 @@
         '</div>';
     }
 
+    var aindaNaoAconteceu = ev.data > todayISO() && !Number(ev.quantidade_vendida) && !Number(ev.valor_arrecadado);
+    if (aindaNaoAconteceu) {
+      html += '<div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+        '<span class="badge pending" style="margin-top:0">agendado</span><h3 style="margin:0;font-size:15px">' + esc(ev.nome) + '</h3></div>' +
+        '<div class="lucro-row"><span class="k">Data</span><span class="v num">' + fmtDate(ev.data) + '</span></div>' +
+        (Number(ev.valor_inscricao) ? '<div class="lucro-row"><span class="k">Inscrição já paga</span><span class="v num">' + fmt(ev.valor_inscricao) + '</span></div>' : '') +
+        '<div class="empty" style="padding-top:10px">Lucro aparece assim que você lançar a quantidade vendida e o total arrecadado, depois do evento.</div>' +
+        '</div>';
+      return html;
+    }
+
     html += heroCard('b', ev.nome + ' — lucro do evento', fmt(lucroEv), ev.quantidade_vendida + ' peça(s) vendida(s) a ' + fmt(custoPeca) + '/peça de custo', null, [
       { k: 'Arrecadado', v: fmt(ev.valor_arrecadado) },
       { k: 'Custo das peças', v: fmt(custoVendido) },
@@ -1143,11 +1154,12 @@
   function formEventoBrecho(rec) {
     return '<form class="entry" data-form="eventoBrecho"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
       '<div><label>Nome do evento</label><input required type="text" name="nome" value="' + esc(rec ? rec.nome : "") + '"></div>' +
-      '<div class="fr"><div><label>Data</label><input required type="date" name="data" value="' + esc(rec ? rec.data : todayISO()) + '"></div>' +
-      '<div><label>Qtd. vendida</label><input required type="number" min="0" step="1" name="quantidade_vendida" value="' + (rec ? rec.quantidade_vendida : "") + '"></div></div>' +
-      '<div class="fr"><div><label>Inscrição (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_inscricao" value="' + (rec ? toMoneyDisplay(rec.valor_inscricao) : "") + '"></div>' +
-      '<div><label>Alimentação (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_alimentacao" value="' + (rec ? toMoneyDisplay(rec.valor_alimentacao) : "") + '"></div></div>' +
-      '<div><label>Total arrecadado (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_arrecadado" value="' + (rec ? toMoneyDisplay(rec.valor_arrecadado) : "") + '"></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + esc(rec ? rec.data : todayISO()) + '"></div>' +
+      '<div class="fr"><div><label>Inscrição (R$)</label><input type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_inscricao" value="' + (rec ? toMoneyDisplay(rec.valor_inscricao) : "") + '"></div>' +
+      '<div><label>Alimentação (R$)</label><input type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_alimentacao" value="' + (rec ? toMoneyDisplay(rec.valor_alimentacao) : "") + '"></div></div>' +
+      '<div class="sub" style="margin:2px 2px 4px;color:var(--text-dim);font-size:11.5px">Preencha o que já souber. Qtd. vendida e arrecadado dá pra deixar em branco até o evento acontecer.</div>' +
+      '<div class="fr"><div><label>Qtd. vendida</label><input type="number" min="0" step="1" name="quantidade_vendida" value="' + (rec ? rec.quantidade_vendida : "") + '" placeholder="0"></div>' +
+      '<div><label>Total arrecadado (R$)</label><input type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_arrecadado" value="' + (rec ? toMoneyDisplay(rec.valor_arrecadado) : "") + '"></div></div>' +
       '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional" value="' + esc(rec ? rec.obs : "") + '"></div>' +
       '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
       '</form>';
