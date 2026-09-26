@@ -280,7 +280,11 @@
 </head>
 <body>
 
-<div id="authScreen">
+<div id="loadingScreen" style="min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:14px">
+  Carregando…
+</div>
+
+<div id="authScreen" style="display:none">
   <div class="auth-box">
     <h1>Finanças</h1>
     <div class="tag">Pessoal &amp; Bêrga — acesso privado de vocês duas</div>
@@ -523,6 +527,8 @@
   var subscriptions = [];
 
   function applyAuthState(session) {
+    var loading = document.getElementById("loadingScreen");
+    if (loading) loading.style.display = "none";
     if (session) {
       document.getElementById("authScreen").style.display = "none";
       document.getElementById("app").style.display = "block";
@@ -538,10 +544,18 @@
     }
   }
 
-  sb.auth.getSession().then(function (res) {
-    applyAuthState(res.data && res.data.session);
-  }).catch(function () {
-    applyAuthState(null);
+  function checkSession() {
+    sb.auth.getSession().then(function (res) {
+      applyAuthState(res.data && res.data.session);
+    }).catch(function () {
+      applyAuthState(null);
+    });
+  }
+
+  checkSession();
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") checkSession();
   });
 
   sb.auth.onAuthStateChange(function (event, session) {
