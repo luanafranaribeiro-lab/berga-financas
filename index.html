@@ -388,10 +388,11 @@
     garimpos: [],
     embalagens: [],
     eventosBrecho: [],
-    eventoBrechoAtual: null
+    eventoBrechoAtual: null,
+    insumos: []
   };
 
-  var TABLES = ["entradas_pessoal", "saidas_pessoal", "entradas_berga", "saidas_berga", "edicoes", "bancos", "faturas_cartao", "brecho_garimpos", "brecho_embalagens", "brecho_eventos"];
+  var TABLES = ["entradas_pessoal", "saidas_pessoal", "entradas_berga", "saidas_berga", "edicoes", "bancos", "faturas_cartao", "brecho_garimpos", "brecho_embalagens", "brecho_eventos", "brecho_insumos"];
   var KEY_BY_TABLE = {
     entradas_pessoal: "entradasPessoal",
     saidas_pessoal: "saidasPessoal",
@@ -402,7 +403,8 @@
     faturas_cartao: "faturas",
     brecho_garimpos: "garimpos",
     brecho_embalagens: "embalagens",
-    brecho_eventos: "eventosBrecho"
+    brecho_eventos: "eventosBrecho",
+    brecho_insumos: "insumos"
   };
 
   var CAT_ENTRADA_PESSOAL = ["Salário", "Freela", "Pensão", "Venda", "A receber de alguém", "Outra"];
@@ -602,6 +604,7 @@
     else if (table === "bancos") q = q.order("tipo", { ascending: true }).order("nome", { ascending: true });
     else if (table === "faturas_cartao") q = q.order("mes", { ascending: true });
     else if (table === "brecho_eventos") q = q.order("data", { ascending: true });
+    else if (table === "brecho_insumos") q = q.order("nome", { ascending: true });
     else q = q.order("data", { ascending: false });
     var res = await q;
     if (res.error) return;
@@ -1064,6 +1067,15 @@
     });
     html += '</div>';
 
+    html += '<div class="section-title">Estoque de materiais</div>';
+    html += (state.openForm === "insumo") ? formInsumo(state.editRecord) : '<button class="fab pessoal" data-open="insumo">+ Novo item</button>';
+    html += '<div class="card" style="margin-top:12px">';
+    if (!state.insumos.length) html += '<div class="empty">Nenhum item cadastrado.</div>';
+    state.insumos.forEach(function (i) {
+      html += rowItem(i.nome, i.obs || "estoque", String(i.quantidade), 'in', "brecho_insumos:" + i.id, "brecho_insumos:" + i.id);
+    });
+    html += '</div>';
+
     html += '<div class="section-title">Eventos de venda</div>';
     html += '<div class="edicao-pills">';
     state.eventosBrecho.forEach(function (ev) {
@@ -1101,6 +1113,14 @@
     return html;
   }
 
+  function formInsumo(rec) {
+    return '<form class="entry" data-form="insumo"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div><label>Nome do item</label><input required type="text" name="nome" placeholder="ex.: Sacolinhas, Mimos, Adesivos" value="' + esc(rec ? rec.nome : "") + '"></div>' +
+      '<div><label>Quantidade em estoque</label><input required type="number" step="1" name="quantidade" value="' + (rec ? rec.quantidade : "0") + '"></div>' +
+      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional" value="' + esc(rec ? rec.obs : "") + '"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
+      '</form>';
+  }
   function formGarimpo(rec) {
     return '<form class="entry" data-form="garimpo"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
       '<div class="fr"><div><label>Gasto de garimpo (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_garimpo" value="' + (rec ? toMoneyDisplay(rec.valor_garimpo) : "") + '"></div>' +
@@ -1159,6 +1179,7 @@
         else if (table === "brecho_garimpos") list = state.garimpos;
         else if (table === "brecho_embalagens") list = state.embalagens;
         else if (table === "brecho_eventos") list = state.eventosBrecho;
+        else if (table === "brecho_insumos") list = state.insumos;
         rec = (list || []).find(function (x) { return String(x.id) === id; });
         if (!rec) return;
         state.editRecord = rec;
@@ -1170,6 +1191,7 @@
         else if (table === "brecho_garimpos") state.openForm = "garimpo";
         else if (table === "brecho_embalagens") state.openForm = "embalagem";
         else if (table === "brecho_eventos") state.openForm = "eventoBrecho";
+        else if (table === "brecho_insumos") state.openForm = "insumo";
         render();
       };
     });
@@ -1269,6 +1291,11 @@
             if (resEB.data && resEB.data[0]) state.eventoBrechoAtual = resEB.data[0].id;
           }
           fetchTable("brecho_eventos");
+        } else if (kind === "insumo") {
+          var payloadInsumo = { nome: fd.get("nome"), quantidade: parseInt(fd.get("quantidade"), 10) || 0, obs: fd.get("obs") || "" };
+          if (editId) { await sb.from("brecho_insumos").update(payloadInsumo).eq("id", editId); }
+          else { await sb.from("brecho_insumos").insert([payloadInsumo]); }
+          fetchTable("brecho_insumos");
         }
         state.openForm = null;
         state.editRecord = null;
