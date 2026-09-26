@@ -303,7 +303,6 @@
       <button type="submit" class="btn-primary" id="authSubmit">Entrar</button>
     </form>
     <div id="authMsg"></div>
-    <div id="debugInfo" style="margin-top:22px;font-size:10.5px;color:var(--text-dim);line-height:1.5;word-break:break-all"></div>
   </div>
 </div>
 
@@ -523,31 +522,7 @@
 
   var subscriptions = [];
 
-  (function debugSessionCheck() {
-    var el = document.getElementById("debugInfo");
-    if (!el) return;
-    var lines = [];
-    try {
-      var keys = Object.keys(window.localStorage).filter(function (k) { return k.indexOf("sb-") === 0; });
-      lines.push("localStorage sb-: " + (keys.length ? keys.join(", ") : "nenhuma chave encontrada"));
-    } catch (e) {
-      lines.push("localStorage inacessível: " + e.message);
-    }
-    sb.auth.getSession().then(function (res) {
-      if (res.error) {
-        lines.push("getSession erro: " + res.error.message);
-      } else if (res.data && res.data.session) {
-        lines.push("getSession: sessão encontrada, expira " + new Date(res.data.session.expires_at * 1000).toLocaleString('pt-BR'));
-      } else {
-        lines.push("getSession: nenhuma sessão ativa");
-      }
-      el.textContent = "[diagnóstico] " + lines.join(" · ");
-    }).catch(function (e) {
-      lines.push("getSession exceção: " + e.message);
-      el.textContent = "[diagnóstico] " + lines.join(" · ");
-    });
-  })();
-  sb.auth.onAuthStateChange(function (event, session) {
+  function applyAuthState(session) {
     if (session) {
       document.getElementById("authScreen").style.display = "none";
       document.getElementById("app").style.display = "block";
@@ -561,6 +536,17 @@
       subscriptions = [];
       state.ready = false;
     }
+  }
+
+  sb.auth.getSession().then(function (res) {
+    applyAuthState(res.data && res.data.session);
+  }).catch(function () {
+    applyAuthState(null);
+  });
+
+  sb.auth.onAuthStateChange(function (event, session) {
+    if (event === "INITIAL_SESSION") return;
+    applyAuthState(session);
   });
 
   // ---------------- DATA SYNC ----------------
