@@ -525,6 +525,7 @@
   document.getElementById("logoutBtn").onclick = function () { sb.auth.signOut(); };
 
   var subscriptions = [];
+  var syncStarted = false;
 
   function applyAuthState(session) {
     var loading = document.getElementById("loadingScreen");
@@ -533,8 +534,9 @@
       document.getElementById("authScreen").style.display = "none";
       document.getElementById("app").style.display = "block";
       document.querySelector("nav.tabs").style.display = "block";
-      startSync();
+      if (!syncStarted) { syncStarted = true; startSync(); }
     } else {
+      syncStarted = false;
       document.getElementById("authScreen").style.display = "flex";
       document.getElementById("app").style.display = "none";
       document.querySelector("nav.tabs").style.display = "none";
@@ -544,24 +546,20 @@
     }
   }
 
-  function checkSession() {
-    sb.auth.getSession().then(function (res) {
-      applyAuthState(res.data && res.data.session);
-    }).catch(function () {
-      applyAuthState(null);
-    });
-  }
-
-  checkSession();
-
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") checkSession();
-  });
-
+  // Single source of truth: let the SDK's own onAuthStateChange (which fires
+  // once on load with the recovered session, then again on sign-in/out/refresh)
+  // drive the UI. Calling getSession() separately here as well can race with
+  // this same internal check and trigger Supabase's refresh-token reuse
+  // protection, which invalidates the whole session — that was the bug.
   sb.auth.onAuthStateChange(function (event, session) {
-    if (event === "INITIAL_SESSION") return;
     applyAuthState(session);
   });
+
+  // safety net: never leave the person staring at "Carregando…" forever
+  setTimeout(function () {
+    var loading = document.getElementById("loadingScreen");
+    if (loading && loading.style.display !== "none") applyAuthState(null);
+  }, 5000);
 
   // ---------------- DATA SYNC ----------------
   var syncedCount = 0;
@@ -787,7 +785,7 @@
     html += '<button class="pill add" data-open="edicao">+ edição</button>';
     html += '</div>';
 
-    if (state.openForm === "edicao") html += formEdicao();
+    if (state.openForm === "edicao") html += formEdicao(state.editRecord);
 
     if (!state.edicoes.length) {
       html += '<div class="card"><div class="empty">Cadastre a primeira edição da Bêrga para começar a lançar inscrições e gastos.</div></div>';
@@ -795,6 +793,13 @@
     }
     var ed = state.edicoes.find(function (e) { return e.id === state.edicaoAtual; }) || state.edicoes[0];
     if (!ed) return html;
+
+    if (state.openForm !== "edicao") {
+      html += '<div style="display:flex;justify-content:flex-end;gap:14px;margin:-8px 2px 10px;font-size:12px">' +
+        '<button class="del-btn" style="font-size:12px" data-edit="edicoes:' + ed.id + '">✎ editar esta edição</button>' +
+        '<button class="del-btn" style="font-size:12px" data-del="edicoes:' + ed.id + '">✕ excluir</button>' +
+        '</div>';
+    }
 
     var entradasEd = state.entradasBerga.filter(function (e) { return e.edicao_id === ed.id; });
     var saidasEd = state.saidasBerga.filter(function (e) { return e.edicao_id === ed.id; });
@@ -838,11 +843,11 @@
     return html;
   }
 
-  function formEdicao() {
-    return '<form class="entry" data-form="edicao">' +
-      '<div><label>Nome da edição</label><input required type="text" name="nome" placeholder="ex.: 17/10 ou 09–14/11"></div>' +
-      '<div><label>Data de início</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
-      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Criar edição</button></div>' +
+  function formEdicao(rec) {
+    return '<form class="entry" data-form="edicao"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div><label>Nome da edição</label><input required type="text" name="nome" placeholder="ex.: 17/10 ou 09–14/11" value="' + esc(rec ? rec.nome : "") + '"></div>' +
+      '<div><label>Data de início</label><input required type="date" name="data" value="' + esc(rec ? rec.data : todayISO()) + '"></div></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Criar edição") + '</button></div>' +
       '</form>';
   }
   function formEntradaBerga(ed, rec) {
@@ -1006,6 +1011,7 @@
         else if (table === "saidas_berga") list = state.saidasBerga;
         else if (table === "bancos") list = state.bancos;
         else if (table === "faturas_cartao") list = state.faturas;
+        else if (table === "edicoes") list = state.edicoes;
         rec = (list || []).find(function (x) { return String(x.id) === id; });
         if (!rec) return;
         state.editRecord = rec;
@@ -1013,6 +1019,7 @@
         else if (table === "saidas_berga") state.openForm = "saidaBerga";
         else if (table === "bancos") state.openForm = rec.tipo === "cartao" ? "cartao" : "banco";
         else if (table === "faturas_cartao") { state.openForm = "fatura"; state.faturaCartaoId = rec.banco_id; }
+        else if (table === "edicoes") state.openForm = "edicao";
         render();
       };
     });
@@ -1028,7 +1035,13 @@
     c.querySelectorAll("[data-del]").forEach(function (b) {
       b.onclick = async function () {
         var parts = b.dataset.del.split(":");
-        try { await sb.from(parts[0]).delete().eq("id", parts[1]); fetchTable(parts[0]); } catch (e) {}
+        if (parts[0] === "edicoes" && !window.confirm("Excluir esta edição apaga também todas as inscrições e gastos lançados nela. Tem certeza?")) return;
+        try {
+          await sb.from(parts[0]).delete().eq("id", parts[1]);
+          if (parts[0] === "edicoes" && state.edicaoAtual === parts[1]) state.edicaoAtual = null;
+          fetchTable(parts[0]);
+          if (parts[0] === "edicoes") { fetchTable("entradas_berga"); fetchTable("saidas_berga"); }
+        } catch (e) {}
       };
     });
 
@@ -1052,8 +1065,12 @@
           await sb.from("saidas_pessoal").insert([{ valor: parseMoney(fd.get("valor")), data: fd.get("data"), categoria: fd.get("categoria"), fixo: fd.get("fixo") === "on", status: fd.get("status"), obs: fd.get("obs") || "" }]);
           fetchTable("saidas_pessoal");
         } else if (kind === "edicao") {
-          var res = await sb.from("edicoes").insert([{ nome: fd.get("nome"), data: fd.get("data") }]).select();
-          if (res.data && res.data[0]) state.edicaoAtual = res.data[0].id;
+          var payloadEdicao = { nome: fd.get("nome"), data: fd.get("data") };
+          if (editId) { await sb.from("edicoes").update(payloadEdicao).eq("id", editId); }
+          else {
+            var res = await sb.from("edicoes").insert([payloadEdicao]).select();
+            if (res.data && res.data[0]) state.edicaoAtual = res.data[0].id;
+          }
           fetchTable("edicoes");
         } else if (kind === "entradaBerga") {
           var payloadEB = { edicao_id: state.edicaoAtual, marca: fd.get("marca"), valor_total: parseMoney(fd.get("valor_total")), valor_pago: parseMoney(fd.get("valor_pago")), forma: fd.get("forma"), data: fd.get("data") };
