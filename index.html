@@ -262,6 +262,7 @@
       <button type="submit" class="btn-primary" id="authSubmit">Entrar</button>
     </form>
     <div id="authMsg"></div>
+    <div id="debugInfo" style="margin-top:22px;font-size:10.5px;color:var(--text-dim);line-height:1.5;word-break:break-all"></div>
   </div>
 </div>
 
@@ -294,6 +295,10 @@
       <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17"/><path d="M7 13.5h4"/></svg>
       Contas
     </button>
+    <button data-tab="bancos">
+      <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="7.5" cy="14.5" r="1"/><path d="M3 6l9-3 9 3"/></svg>
+      Bancos
+    </button>
   </div>
 </nav>
 
@@ -316,21 +321,28 @@
     subtabPessoal: "entradas",
     subtabBerga: "entradas",
     edicaoAtual: null,
-    openForm: null
+    openForm: null,
+    editRecord: null,
+    bancos: [],
+    faturas: [],
+    bancoAtual: null,
+    faturaCartaoId: null
   };
 
-  var TABLES = ["entradas_pessoal", "saidas_pessoal", "entradas_berga", "saidas_berga", "edicoes"];
+  var TABLES = ["entradas_pessoal", "saidas_pessoal", "entradas_berga", "saidas_berga", "edicoes", "bancos", "faturas_cartao"];
   var KEY_BY_TABLE = {
     entradas_pessoal: "entradasPessoal",
     saidas_pessoal: "saidasPessoal",
     entradas_berga: "entradasBerga",
     saidas_berga: "saidasBerga",
-    edicoes: "edicoes"
+    edicoes: "edicoes",
+    bancos: "bancos",
+    faturas_cartao: "faturas"
   };
 
   var CAT_ENTRADA_PESSOAL = ["Salário", "Freela", "Pensão", "Venda", "A receber de alguém", "Outra"];
   var CAT_SAIDA_PESSOAL = ["Plano Arthur", "Remédios", "Faculdade", "Passagens", "Uber", "Alimentação", "Claro", "Cartão", "Lazer", "Outro"];
-  var CAT_SAIDA_BERGA = ["Atrações", "Fotografia", "Videomaker", "Designer", "Materiais", "Brindes", "Impressão", "Decoração", "Aluguel/Estrutura", "Divulgação", "Outro"];
+  var CAT_SAIDA_BERGA = ["Organização", "Atrações", "Fotografia", "Videomaker", "Designer", "Materiais", "Brindes", "Impressão", "Decoração", "Aluguel/Estrutura", "Divulgação", "Outro"];
   var FORMAS_PAG = ["Pix", "Cartão", "Dinheiro", "Transferência"];
 
   function fmt(n) {
@@ -356,6 +368,29 @@
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
+  }
+
+  // ---------------- money mask (BRL, digits fill from the right as cents) ----------------
+  function maskMoneyInput(ev) {
+    var el = ev.target;
+    var digits = el.value.replace(/\D/g, "");
+    digits = digits.replace(/^0+(?=\d)/, "");
+    if (!digits) { el.value = ""; return; }
+    while (digits.length < 3) digits = "0" + digits;
+    var intPart = digits.slice(0, -2).replace(/^0+(?=\d)/, "") || "0";
+    var centsPart = digits.slice(-2);
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    el.value = intPart + "," + centsPart;
+  }
+  function parseMoney(str) {
+    if (!str) return 0;
+    var clean = String(str).replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(clean);
+    return isNaN(n) ? 0 : n;
+  }
+  function toMoneyDisplay(n) {
+    n = Number(n) || 0;
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   // ---------------- AUTH ----------------
@@ -408,6 +443,31 @@
   document.getElementById("logoutBtn").onclick = function () { sb.auth.signOut(); };
 
   var subscriptions = [];
+
+  (function debugSessionCheck() {
+    var el = document.getElementById("debugInfo");
+    if (!el) return;
+    var lines = [];
+    try {
+      var keys = Object.keys(window.localStorage).filter(function (k) { return k.indexOf("sb-") === 0; });
+      lines.push("localStorage sb-: " + (keys.length ? keys.join(", ") : "nenhuma chave encontrada"));
+    } catch (e) {
+      lines.push("localStorage inacessível: " + e.message);
+    }
+    sb.auth.getSession().then(function (res) {
+      if (res.error) {
+        lines.push("getSession erro: " + res.error.message);
+      } else if (res.data && res.data.session) {
+        lines.push("getSession: sessão encontrada, expira " + new Date(res.data.session.expires_at * 1000).toLocaleString('pt-BR'));
+      } else {
+        lines.push("getSession: nenhuma sessão ativa");
+      }
+      el.textContent = "[diagnóstico] " + lines.join(" · ");
+    }).catch(function (e) {
+      lines.push("getSession exceção: " + e.message);
+      el.textContent = "[diagnóstico] " + lines.join(" · ");
+    });
+  })();
   sb.auth.onAuthStateChange(function (event, session) {
     if (session) {
       document.getElementById("authScreen").style.display = "none";
@@ -440,13 +500,19 @@
 
   async function fetchTable(table) {
     var q = sb.from(table).select("*");
-    q = table === "edicoes" ? q.order("data", { ascending: true }) : q.order("data", { ascending: false });
+    if (table === "edicoes") q = q.order("data", { ascending: true });
+    else if (table === "bancos") q = q.order("tipo", { ascending: true }).order("nome", { ascending: true });
+    else if (table === "faturas_cartao") q = q.order("mes", { ascending: true });
+    else q = q.order("data", { ascending: false });
     var res = await q;
     if (res.error) return;
     var key = KEY_BY_TABLE[table];
     state[key] = res.data || [];
     if (table === "edicoes" && !state.edicaoAtual && state.edicoes.length) {
       state.edicaoAtual = state.edicoes[0].id;
+    }
+    if (table === "bancos" && !state.bancoAtual && state.bancos.length) {
+      state.bancoAtual = state.bancos[0].id;
     }
     syncedCount++;
     if (syncedCount >= TABLES.length) state.ready = true;
@@ -469,7 +535,11 @@
     return state.saidasBerga.filter(function (e) { return e.status === "pago"; })
       .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
   }
-  function saldoPessoal() { return totalRecebidoPessoal() - totalPagoPessoal(); }
+  function totalOrganizacaoPaga() {
+    return state.saidasBerga.filter(function (e) { return e.status === "pago" && e.categoria === "Organização"; })
+      .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+  }
+  function saldoPessoal() { return totalRecebidoPessoal() + totalOrganizacaoPaga() - totalPagoPessoal(); }
   function saldoBerga() { return totalPagoBerga() - totalSaidaBerga(); }
 
   function entradasMes() {
@@ -477,7 +547,9 @@
       .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
     var b = state.entradasBerga.filter(function (e) { return isThisMonth(e.data); })
       .reduce(function (s, e) { return s + Number(e.valor_pago || 0); }, 0);
-    return a + b;
+    var c = state.saidasBerga.filter(function (e) { return e.status === "pago" && e.categoria === "Organização" && isThisMonth(e.data); })
+      .reduce(function (s, e) { return s + Number(e.valor || 0); }, 0);
+    return a + b + c;
   }
   function saidasMes() {
     var a = state.saidasPessoal.filter(function (e) { return e.status === "pago" && isThisMonth(e.data); })
@@ -526,6 +598,7 @@
     else if (state.tab === "pessoal") el.innerHTML = renderPessoal();
     else if (state.tab === "berga") el.innerHTML = renderBerga();
     else if (state.tab === "contas") el.innerHTML = renderContas();
+    else if (state.tab === "bancos") el.innerHTML = renderBancos();
     attachHandlers();
   }
 
@@ -540,6 +613,10 @@
     html += '<div class="stat"><div class="label">Entradas do mês</div><div class="value num" style="color:var(--positive)">' + fmt(entradasMes()) + '</div></div>';
     html += '<div class="stat"><div class="label">Saídas do mês</div><div class="value num" style="color:var(--danger)">' + fmt(saidasMes()) + '</div></div>';
     html += '<div class="stat wide"><div class="label">Disponível (pessoal + Bêrga)</div><div class="value num">' + fmt(disp) + '</div></div>';
+    var org = totalOrganizacaoPaga();
+    if (org > 0) {
+      html += '<div class="stat wide"><div class="label">Transferido da Bêrga pra você (Organização)</div><div class="value num" style="color:var(--accent-pessoal)">' + fmt(org) + '</div></div>';
+    }
     html += '</div>';
 
     html += '<div class="section-title">A vencer / a receber</div>';
@@ -556,15 +633,17 @@
     return html;
   }
 
-  function rowItem(cat, meta, amt, cls, delAttr, badge) {
+  function rowItem(cat, meta, amt, cls, delAttr, editAttr, badge) {
     var h = '<div class="row-item">';
     h += '<div class="left"><div class="cat">' + esc(cat) + '</div>';
     if (meta) h += '<div class="meta">' + esc(meta) + '</div>';
     if (badge) h += '<span class="badge ' + badge.cls + '">' + esc(badge.text) + '</span>';
     h += '</div>';
     h += '<div class="right"><div class="amt num ' + (cls || '') + '">' + amt + '</div>';
+    h += '<div style="display:flex;gap:2px;justify-content:flex-end">';
+    if (editAttr) h += '<button class="del-btn" data-edit="' + editAttr + '">✎</button>';
     if (delAttr) h += '<button class="del-btn" data-del="' + delAttr + '">✕</button>';
-    h += '</div></div>';
+    h += '</div></div></div>';
     return h;
   }
 
@@ -580,7 +659,7 @@
       var list = state.entradasPessoal;
       if (!list.length) html += '<div class="empty">Nenhuma entrada lançada ainda.</div>';
       list.forEach(function (e) {
-        html += rowItem(e.categoria, fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'in', "entradas_pessoal:" + e.id,
+        html += rowItem(e.categoria, fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'in', "entradas_pessoal:" + e.id, null,
           e.status === "a_receber" ? { cls: "pending", text: "a receber" } : { cls: "done", text: "recebido" });
       });
       html += '</div>';
@@ -590,7 +669,7 @@
       var list2 = state.saidasPessoal;
       if (!list2.length) html += '<div class="empty">Nenhuma saída lançada ainda.</div>';
       list2.forEach(function (e) {
-        html += rowItem(e.categoria + (e.fixo ? " (fixo)" : ""), fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'out', "saidas_pessoal:" + e.id,
+        html += rowItem(e.categoria + (e.fixo ? " (fixo)" : ""), fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'out', "saidas_pessoal:" + e.id, null,
           e.status === "a_pagar" ? { cls: "pending", text: "a pagar" } : { cls: "done", text: "pago" });
       });
       html += '</div>';
@@ -601,7 +680,7 @@
   function formEntradaPessoal() {
     var opts = CAT_ENTRADA_PESSOAL.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join("");
     return '<form class="entry" data-form="entradaPessoal">' +
-      '<div class="fr"><div><label>Valor (R$)</label><input required type="number" step="0.01" min="0" name="valor"></div>' +
+      '<div class="fr"><div><label>Valor (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor"></div>' +
       '<div><label>Data</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
       '<div><label>Categoria</label><select name="categoria">' + opts + '</select></div>' +
       '<div><label>Status</label><select name="status"><option value="recebido">Recebido</option><option value="a_receber">A receber</option></select></div>' +
@@ -612,7 +691,7 @@
   function formSaidaPessoal() {
     var opts = CAT_SAIDA_PESSOAL.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join("");
     return '<form class="entry" data-form="saidaPessoal">' +
-      '<div class="fr"><div><label>Valor (R$)</label><input required type="number" step="0.01" min="0" name="valor"></div>' +
+      '<div class="fr"><div><label>Valor (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor"></div>' +
       '<div><label>Data</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
       '<div><label>Categoria</label><select name="categoria">' + opts + '</select></div>' +
       '<label class="chk"><input type="checkbox" name="fixo"> Gasto fixo mensal</label>' +
@@ -657,23 +736,24 @@
     html += '</div>';
 
     if (state.subtabBerga === "entradas") {
-      html += state.openForm === "entradaBerga" ? formEntradaBerga(ed) : '<button class="fab berga" data-open="entradaBerga">+ Nova inscrição</button>';
+      html += (state.openForm === "entradaBerga") ? formEntradaBerga(ed, state.editRecord) : '<button class="fab berga" data-open="entradaBerga">+ Nova inscrição</button>';
       html += '<div class="card" style="margin-top:12px">';
       if (!entradasEd.length) html += '<div class="empty">Nenhuma inscrição lançada para esta edição.</div>';
       entradasEd.forEach(function (e) {
         var pend = Number(e.valor_total || 0) - Number(e.valor_pago || 0);
         html += rowItem(e.marca, fmtDate(e.data) + " · " + (e.forma || "") + (pend > 0.004 ? " · falta " + fmt(pend) : ""),
-          fmt(e.valor_total), 'in', "entradas_berga:" + e.id,
+          fmt(e.valor_total), 'in', "entradas_berga:" + e.id, "entradas_berga:" + e.id,
           pend > 0.004 ? { cls: "pending", text: "parcial" } : { cls: "done", text: "quitado" });
       });
       html += '</div>';
     } else {
-      html += state.openForm === "saidaBerga" ? formSaidaBerga(ed) : '<button class="fab berga" data-open="saidaBerga">+ Novo gasto</button>';
+      html += (state.openForm === "saidaBerga") ? formSaidaBerga(ed, state.editRecord) : '<button class="fab berga" data-open="saidaBerga">+ Novo gasto</button>';
       html += '<div class="card" style="margin-top:12px">';
       if (!saidasEd.length) html += '<div class="empty">Nenhum gasto lançado para esta edição.</div>';
       saidasEd.forEach(function (e) {
-        html += rowItem(e.categoria, fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'out', "saidas_berga:" + e.id,
-          e.status === "a_pagar" ? { cls: "pending", text: "a pagar" } : { cls: "done", text: "pago" });
+        var isOrg = e.categoria === "Organização";
+        var badge = e.status === "a_pagar" ? { cls: "pending", text: "a pagar" } : (isOrg ? { cls: "done", text: "➜ transferido p/ pessoal" } : { cls: "done", text: "pago" });
+        html += rowItem(e.categoria, fmtDate(e.data) + (e.obs ? " · " + e.obs : ""), fmt(e.valor), 'out', "saidas_berga:" + e.id, "saidas_berga:" + e.id, badge);
       });
       html += '</div>';
     }
@@ -683,30 +763,30 @@
   function formEdicao() {
     return '<form class="entry" data-form="edicao">' +
       '<div><label>Nome da edição</label><input required type="text" name="nome" placeholder="ex.: 17/10 ou 09–14/11"></div>' +
-      '<div><label>Data de início</label><input required type="date" name="data" value="' + todayISO() + '"></div>' +
+      '<div><label>Data de início</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
       '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Criar edição</button></div>' +
       '</form>';
   }
-  function formEntradaBerga(ed) {
-    var opts = FORMAS_PAG.map(function (f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join("");
-    return '<form class="entry" data-form="entradaBerga">' +
-      '<div><label>Marca / expositor</label><input required type="text" name="marca"></div>' +
-      '<div class="fr"><div><label>Valor total (R$)</label><input required type="number" step="0.01" min="0" name="valor_total"></div>' +
-      '<div><label>Já pago (R$)</label><input required type="number" step="0.01" min="0" name="valor_pago" value="0"></div></div>' +
+  function formEntradaBerga(ed, rec) {
+    var opts = FORMAS_PAG.map(function (f) { return '<option value="' + esc(f) + '"' + (rec && rec.forma === f ? " selected" : "") + '>' + esc(f) + '</option>'; }).join("");
+    return '<form class="entry" data-form="entradaBerga"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div><label>Marca / expositor</label><input required type="text" name="marca" value="' + esc(rec ? rec.marca : "") + '"></div>' +
+      '<div class="fr"><div><label>Valor total (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_total" value="' + (rec ? toMoneyDisplay(rec.valor_total) : "") + '"></div>' +
+      '<div><label>Já pago (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor_pago" value="' + (rec ? toMoneyDisplay(rec.valor_pago) : "") + '"></div></div>' +
       '<div class="fr"><div><label>Forma</label><select name="forma">' + opts + '</select></div>' +
-      '<div><label>Data</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
-      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Salvar</button></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + esc(rec ? rec.data : todayISO()) + '"></div></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
       '</form>';
   }
-  function formSaidaBerga(ed) {
-    var opts = CAT_SAIDA_BERGA.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join("");
-    return '<form class="entry" data-form="saidaBerga">' +
-      '<div class="fr"><div><label>Valor (R$)</label><input required type="number" step="0.01" min="0" name="valor"></div>' +
-      '<div><label>Data</label><input required type="date" name="data" value="' + todayISO() + '"></div></div>' +
+  function formSaidaBerga(ed, rec) {
+    var opts = CAT_SAIDA_BERGA.map(function (c) { return '<option value="' + esc(c) + '"' + (rec && rec.categoria === c ? " selected" : "") + '>' + esc(c) + '</option>'; }).join("");
+    return '<form class="entry" data-form="saidaBerga"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div class="fr"><div><label>Valor (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor" value="' + (rec ? toMoneyDisplay(rec.valor) : "") + '"></div>' +
+      '<div><label>Data</label><input required type="date" name="data" value="' + esc(rec ? rec.data : todayISO()) + '"></div></div>' +
       '<div><label>Categoria</label><select name="categoria">' + opts + '</select></div>' +
-      '<div><label>Status</label><select name="status"><option value="pago">Pago</option><option value="a_pagar">A pagar</option></select></div>' +
-      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional"></div>' +
-      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">Salvar</button></div>' +
+      '<div><label>Status</label><select name="status"><option value="pago"' + (rec && rec.status === "pago" ? " selected" : "") + '>Pago</option><option value="a_pagar"' + (rec && rec.status === "a_pagar" ? " selected" : "") + '>A pagar</option></select></div>' +
+      '<div><label>Observação</label><input type="text" name="obs" placeholder="opcional" value="' + esc(rec ? rec.obs : "") + '"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
       '</form>';
   }
 
@@ -737,15 +817,116 @@
     return html;
   }
 
+  function mesLabel(m) {
+    if (!m) return "";
+    var parts = m.split("-");
+    if (parts.length !== 2) return m;
+    var nomes = ["", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    return (nomes[parseInt(parts[1], 10)] || m) + "/" + parts[0].slice(2);
+  }
+
+  function renderBancos() {
+    var contas = state.bancos.filter(function (b) { return b.tipo === "conta"; });
+    var cartoes = state.bancos.filter(function (b) { return b.tipo === "cartao"; });
+    var totalContas = contas.reduce(function (s, b) { return s + Number(b.saldo || 0); }, 0);
+    var totalFaturasAbertas = state.faturas.reduce(function (s, f) { return s + Number(f.valor || 0); }, 0);
+
+    var html = '<div class="grid2">';
+    html += '<div class="stat"><div class="label">Total em contas</div><div class="value num" style="color:var(--positive)">' + fmt(totalContas) + '</div></div>';
+    html += '<div class="stat"><div class="label">Faturas em aberto</div><div class="value num" style="color:var(--danger)">' + fmt(totalFaturasAbertas) + '</div></div>';
+    html += '</div>';
+
+    html += '<div class="section-title">Contas</div>';
+    html += (state.openForm === "banco") ? formBanco(state.editRecord) : '<button class="fab pessoal" data-open="banco">+ Nova conta</button>';
+    html += '<div class="card" style="margin-top:12px">';
+    if (!contas.length) html += '<div class="empty">Nenhuma conta cadastrada.</div>';
+    contas.forEach(function (b) {
+      html += rowItem(b.nome, "conta", fmt(b.saldo), 'in', "bancos:" + b.id, "bancos:" + b.id);
+    });
+    html += '</div>';
+
+    html += '<div class="section-title">Cartões de crédito</div>';
+    html += (state.openForm === "cartao") ? formCartao(state.editRecord) : '<button class="fab berga" data-open="cartao">+ Novo cartão</button>';
+    if (!cartoes.length) html += '<div class="card"><div class="empty">Nenhum cartão cadastrado.</div></div>';
+    cartoes.forEach(function (cRec) {
+      var faturasC = state.faturas.filter(function (f) { return f.banco_id === cRec.id; });
+      html += '<div class="card">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
+      html += '<h3 style="margin:0 0 4px;font-size:15px">' + esc(cRec.nome) + '</h3>';
+      html += '<div style="display:flex;gap:2px"><button class="del-btn" data-edit="bancos:' + cRec.id + '">✎</button><button class="del-btn" data-del="bancos:' + cRec.id + '">✕</button></div>';
+      html += '</div>';
+      html += '<div class="lucro-row"><span class="k">Limite total</span><span class="v num">' + fmt(cRec.limite) + '</span></div>';
+      if (faturasC.length) {
+        faturasC.forEach(function (f) {
+          html += rowItem(mesLabel(f.mes), "fatura", fmt(f.valor), 'out', "faturas_cartao:" + f.id, "faturas_cartao:" + f.id);
+        });
+      } else {
+        html += '<div class="empty">Nenhuma fatura lançada.</div>';
+      }
+      if (state.openForm === "fatura" && state.faturaCartaoId === cRec.id) {
+        html += formFatura(state.editRecord);
+      } else {
+        html += '<button class="fab berga" data-open-fatura="' + cRec.id + '" style="margin-top:8px">+ Fatura</button>';
+      }
+      html += '</div>';
+    });
+
+    return html;
+  }
+
+  function formBanco(rec) {
+    return '<form class="entry" data-form="banco"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div><label>Nome da conta</label><input required type="text" name="nome" value="' + esc(rec ? rec.nome : "") + '"></div>' +
+      '<div><label>Saldo atual (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="saldo" value="' + (rec ? toMoneyDisplay(rec.saldo) : "") + '"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
+      '</form>';
+  }
+  function formCartao(rec) {
+    return '<form class="entry" data-form="cartao"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div><label>Nome do cartão</label><input required type="text" name="nome" value="' + esc(rec ? rec.nome : "") + '"></div>' +
+      '<div><label>Limite total (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="limite" value="' + (rec ? toMoneyDisplay(rec.limite) : "") + '"></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
+      '</form>';
+  }
+  function formFatura(rec) {
+    return '<form class="entry" data-form="fatura"' + (rec ? ' data-edit-id="' + rec.id + '"' : '') + '>' +
+      '<div class="fr"><div><label>Mês</label><input required type="month" name="mes" value="' + esc(rec ? rec.mes : "") + '"></div>' +
+      '<div><label>Valor (R$)</label><input required type="text" inputmode="decimal" class="money" placeholder="0,00" name="valor" value="' + (rec ? toMoneyDisplay(rec.valor) : "") + '"></div></div>' +
+      '<div class="actions"><button type="button" class="btn-cancel" data-close>Cancelar</button><button type="submit" class="btn-save">' + (rec ? "Atualizar" : "Salvar") + '</button></div>' +
+      '</form>';
+  }
+
   // ---------------- events ----------------
   function attachHandlers() {
     var c = document.getElementById("content");
 
     c.querySelectorAll("[data-open]").forEach(function (b) {
-      b.onclick = function () { state.openForm = b.dataset.open; render(); };
+      b.onclick = function () { state.openForm = b.dataset.open; state.editRecord = null; state.faturaCartaoId = null; render(); };
+    });
+    c.querySelectorAll("[data-open-fatura]").forEach(function (b) {
+      b.onclick = function () { state.openForm = "fatura"; state.editRecord = null; state.faturaCartaoId = b.dataset.openFatura; render(); };
     });
     c.querySelectorAll("[data-close]").forEach(function (b) {
-      b.onclick = function () { state.openForm = null; render(); };
+      b.onclick = function () { state.openForm = null; state.editRecord = null; state.faturaCartaoId = null; render(); };
+    });
+    c.querySelectorAll("[data-edit]").forEach(function (b) {
+      b.onclick = function () {
+        var parts = b.dataset.edit.split(":");
+        var table = parts[0], id = parts[1];
+        var rec, list;
+        if (table === "entradas_berga") list = state.entradasBerga;
+        else if (table === "saidas_berga") list = state.saidasBerga;
+        else if (table === "bancos") list = state.bancos;
+        else if (table === "faturas_cartao") list = state.faturas;
+        rec = (list || []).find(function (x) { return String(x.id) === id; });
+        if (!rec) return;
+        state.editRecord = rec;
+        if (table === "entradas_berga") state.openForm = "entradaBerga";
+        else if (table === "saidas_berga") state.openForm = "saidaBerga";
+        else if (table === "bancos") state.openForm = rec.tipo === "cartao" ? "cartao" : "banco";
+        else if (table === "faturas_cartao") { state.openForm = "fatura"; state.faturaCartaoId = rec.banco_id; }
+        render();
+      };
     });
     c.querySelectorAll("[data-subtab-pessoal]").forEach(function (b) {
       b.onclick = function () { state.subtabPessoal = b.dataset.subtabPessoal; state.openForm = null; render(); };
@@ -763,35 +944,61 @@
       };
     });
 
+    c.querySelectorAll("input.money").forEach(function (inp) {
+      inp.addEventListener("input", maskMoneyInput);
+    });
+
     var form = c.querySelector("form.entry");
     if (form) form.onsubmit = async function (ev) {
       ev.preventDefault();
       var fd = new FormData(form);
       var kind = form.dataset.form;
+      var editId = form.dataset.editId;
       var btn = form.querySelector(".btn-save");
-      btn.disabled = true; btn.textContent = "Salvando…";
+      btn.disabled = true; btn.textContent = editId ? "Atualizando…" : "Salvando…";
       try {
         if (kind === "entradaPessoal") {
-          await sb.from("entradas_pessoal").insert([{ valor: parseFloat(fd.get("valor")) || 0, data: fd.get("data"), categoria: fd.get("categoria"), status: fd.get("status"), obs: fd.get("obs") || "" }]);
+          await sb.from("entradas_pessoal").insert([{ valor: parseMoney(fd.get("valor")), data: fd.get("data"), categoria: fd.get("categoria"), status: fd.get("status"), obs: fd.get("obs") || "" }]);
           fetchTable("entradas_pessoal");
         } else if (kind === "saidaPessoal") {
-          await sb.from("saidas_pessoal").insert([{ valor: parseFloat(fd.get("valor")) || 0, data: fd.get("data"), categoria: fd.get("categoria"), fixo: fd.get("fixo") === "on", status: fd.get("status"), obs: fd.get("obs") || "" }]);
+          await sb.from("saidas_pessoal").insert([{ valor: parseMoney(fd.get("valor")), data: fd.get("data"), categoria: fd.get("categoria"), fixo: fd.get("fixo") === "on", status: fd.get("status"), obs: fd.get("obs") || "" }]);
           fetchTable("saidas_pessoal");
         } else if (kind === "edicao") {
           var res = await sb.from("edicoes").insert([{ nome: fd.get("nome"), data: fd.get("data") }]).select();
           if (res.data && res.data[0]) state.edicaoAtual = res.data[0].id;
           fetchTable("edicoes");
         } else if (kind === "entradaBerga") {
-          await sb.from("entradas_berga").insert([{ edicao_id: state.edicaoAtual, marca: fd.get("marca"), valor_total: parseFloat(fd.get("valor_total")) || 0, valor_pago: parseFloat(fd.get("valor_pago")) || 0, forma: fd.get("forma"), data: fd.get("data") }]);
+          var payloadEB = { edicao_id: state.edicaoAtual, marca: fd.get("marca"), valor_total: parseMoney(fd.get("valor_total")), valor_pago: parseMoney(fd.get("valor_pago")), forma: fd.get("forma"), data: fd.get("data") };
+          if (editId) { await sb.from("entradas_berga").update(payloadEB).eq("id", editId); }
+          else { await sb.from("entradas_berga").insert([payloadEB]); }
           fetchTable("entradas_berga");
         } else if (kind === "saidaBerga") {
-          await sb.from("saidas_berga").insert([{ edicao_id: state.edicaoAtual, valor: parseFloat(fd.get("valor")) || 0, data: fd.get("data"), categoria: fd.get("categoria"), status: fd.get("status"), obs: fd.get("obs") || "" }]);
+          var payloadSB = { edicao_id: state.edicaoAtual, valor: parseMoney(fd.get("valor")), data: fd.get("data"), categoria: fd.get("categoria"), status: fd.get("status"), obs: fd.get("obs") || "" };
+          if (editId) { await sb.from("saidas_berga").update(payloadSB).eq("id", editId); }
+          else { await sb.from("saidas_berga").insert([payloadSB]); }
           fetchTable("saidas_berga");
+        } else if (kind === "banco") {
+          var payloadBanco = { nome: fd.get("nome"), tipo: "conta", saldo: parseMoney(fd.get("saldo")) };
+          if (editId) { await sb.from("bancos").update(payloadBanco).eq("id", editId); }
+          else { await sb.from("bancos").insert([payloadBanco]); }
+          fetchTable("bancos");
+        } else if (kind === "cartao") {
+          var payloadCartao = { nome: fd.get("nome"), tipo: "cartao", limite: parseMoney(fd.get("limite")) };
+          if (editId) { await sb.from("bancos").update(payloadCartao).eq("id", editId); }
+          else { await sb.from("bancos").insert([payloadCartao]); }
+          fetchTable("bancos");
+        } else if (kind === "fatura") {
+          var payloadFatura = { banco_id: state.faturaCartaoId, mes: fd.get("mes"), valor: parseMoney(fd.get("valor")) };
+          if (editId) { await sb.from("faturas_cartao").update(payloadFatura).eq("id", editId); }
+          else { await sb.from("faturas_cartao").insert([payloadFatura]); }
+          fetchTable("faturas_cartao");
         }
         state.openForm = null;
+        state.editRecord = null;
+        state.faturaCartaoId = null;
         render();
       } catch (e) {
-        btn.disabled = false; btn.textContent = "Salvar";
+        btn.disabled = false; btn.textContent = editId ? "Atualizar" : "Salvar";
       }
     };
   }
