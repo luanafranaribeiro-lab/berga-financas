@@ -507,6 +507,13 @@
     this.textContent = isPw ? "🙈" : "👁";
   };
 
+  function withTimeout(promise, ms, msg) {
+    var timeout = new Promise(function (_, reject) {
+      setTimeout(function () { reject(new Error(msg)); }, ms);
+    });
+    return Promise.race([promise, timeout]);
+  }
+
   document.getElementById("authForm").onsubmit = async function (ev) {
     ev.preventDefault();
     var email = document.getElementById("authEmail").value.trim();
@@ -518,11 +525,11 @@
     btn.textContent = authMode === "entrar" ? "Entrando…" : "Criando…";
     try {
       if (authMode === "entrar") {
-        var r = await sb.auth.signInWithPassword({ email: email, password: password });
+        var r = await withTimeout(sb.auth.signInWithPassword({ email: email, password: password }), 15000, "A conexão demorou demais pra responder. Confira sua internet e tenta de novo.");
         if (r.error) throw r.error;
         try { window.localStorage.setItem("financas_email", email); } catch (e) {}
       } else {
-        var r2 = await sb.auth.signUp({ email: email, password: password });
+        var r2 = await withTimeout(sb.auth.signUp({ email: email, password: password }), 15000, "A conexão demorou demais pra responder. Confira sua internet e tenta de novo.");
         if (r2.error) throw r2.error;
         try { window.localStorage.setItem("financas_email", email); } catch (e) {}
         if (r2.data && r2.data.user && !r2.data.session) {
@@ -535,6 +542,7 @@
     btn.disabled = false;
     btn.textContent = authMode === "entrar" ? "Entrar" : "Criar conta";
   };
+
 
   function traduzErro(m) {
     if (!m) return "Algo deu errado. Tente de novo.";
